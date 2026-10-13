@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { OrdersView } from "../components/OrdersView";
+import { ProductsView } from "../components/ProductsView";
 
 type IconName =
   | "grid"
@@ -83,11 +85,12 @@ export default function Home() {
         <header className="topbar">
           <div className="mobile-brand"><span className="brand-mark">b</span><strong>bruma</strong></div>
           <div className="welcome"><p>Martes, 13 de octubre</p><h1>Buen día, Agustina <span>✦</span></h1></div>
-          <div className="top-actions"><button className="icon-button notification" aria-label="Notificaciones" onClick={() => showToast("Tenés 4 alertas para revisar.")}><Icon name="bell" /><i>4</i></button><button className="new-order" onClick={() => showToast("Abrimos el formulario de nuevo pedido.")}><Icon name="plus" size={18} />Nuevo pedido</button></div>
+          <div className="top-actions"><button className="icon-button notification" aria-label="Notificaciones" onClick={() => showToast("Tenés 4 alertas para revisar.")}><Icon name="bell" /><i>4</i></button><button className="new-order" onClick={() => setActive("Pedidos")}><Icon name="plus" size={18} />Nuevo pedido</button></div>
         </header>
 
         <div className="mobile-nav">{navItems.slice(0, 5).map((item) => <button key={item.label} className={active === item.label ? "active" : ""} onClick={() => setActive(item.label)}><Icon name={item.icon} size={18} /><span>{item.label}</span></button>)}</div>
 
+        {active === "Productos" ? <ProductsView /> : active === "Pedidos" ? <OrdersView /> : <>
         <div className="page-heading"><div><h2>Resumen de hoy</h2><p>Todo lo importante de tu negocio, en un solo lugar.</p></div><button className="date-filter" onClick={() => setRange(range === "7 días" ? "30 días" : "7 días")}>Últimos {range}<Icon name="chevron" size={16} /></button></div>
 
         <section className="kpi-grid">
@@ -110,8 +113,9 @@ export default function Home() {
 
         <section className="lower-grid">
           <article className="panel orders-panel"><div className="panel-head"><div><span className="eyebrow">OPERACIÓN</span><h3>Pedidos recientes</h3></div><button className="text-link" onClick={() => setActive("Pedidos")}>Ver pedidos <Icon name="arrow" size={15} /></button></div><div className="orders-table"><div className="table-head"><span>CLIENTE</span><span>CANAL</span><span>ESTADO</span><span>TOTAL</span><span/></div>{orders.map((order) => <div className="order-row" key={order.id}><div className="customer"><span className="avatar small">{order.initials}</span><span><strong>{order.customer}</strong><small>{order.id} · {order.items}</small></span></div><span className="channel-pill">{order.channel}</span><span className={`status ${order.tone}`}>{order.state}</span><strong className="amount">{order.amount}</strong><button className="row-more" aria-label={`Opciones de ${order.id}`}><Icon name="dots" size={18}/></button></div>)}</div></article>
-          <aside className="quick-column"><article className="panel quick-panel"><div className="panel-head"><div><span className="eyebrow">ACCESOS RÁPIDOS</span><h3>¿Qué querés hacer?</h3></div></div><div className="quick-actions"><button onClick={() => showToast("Abrimos un nuevo pedido.")}><span className="quick-icon lavender"><Icon name="plus" size={19}/></span><span><strong>Nuevo pedido</strong><small>Creá una venta manual</small></span><Icon name="arrow" size={16}/></button><button onClick={() => showToast("Abrimos el alta de producto.")}><span className="quick-icon peach"><Icon name="box" size={19}/></span><span><strong>Agregar producto</strong><small>Sumalo a tu catálogo</small></span><Icon name="arrow" size={16}/></button><button onClick={() => showToast("Abrimos el ingreso de mercadería.")}><span className="quick-icon mint"><Icon name="truck" size={19}/></span><span><strong>Ingresar stock</strong><small>Registrá una recepción</small></span><Icon name="arrow" size={16}/></button></div></article><article className="tip-card"><span>✦</span><div><strong>Tip de Bruma</strong><p>El sábado fue tu mejor día de ventas esta semana.</p><button onClick={() => showToast("Abrimos el reporte semanal.")}>Ver reporte semanal</button></div></article></aside>
+          <aside className="quick-column"><article className="panel quick-panel"><div className="panel-head"><div><span className="eyebrow">ACCESOS RÁPIDOS</span><h3>¿Qué querés hacer?</h3></div></div><div className="quick-actions"><button onClick={() => setActive("Pedidos")}><span className="quick-icon lavender"><Icon name="plus" size={19}/></span><span><strong>Nuevo pedido</strong><small>Creá una venta manual</small></span><Icon name="arrow" size={16}/></button><button onClick={() => setActive("Productos")}><span className="quick-icon peach"><Icon name="box" size={19}/></span><span><strong>Agregar producto</strong><small>Sumalo a tu catálogo</small></span><Icon name="arrow" size={16}/></button><button onClick={() => showToast("El ingreso de stock será el próximo flujo.")}><span className="quick-icon mint"><Icon name="truck" size={19}/></span><span><strong>Ingresar stock</strong><small>Registrá una recepción</small></span><Icon name="arrow" size={16}/></button></div></article><article className="tip-card"><span>✦</span><div><strong>Tip de Bruma</strong><p>El sábado fue tu mejor día de ventas esta semana.</p><button onClick={() => showToast("Abrimos el reporte semanal.")}>Ver reporte semanal</button></div></article></aside>
         </section>
+        </>}
       </section>
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
