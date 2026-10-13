@@ -1,11 +1,12 @@
 /**
- * Database-agnostic domain schema. It intentionally contains no database
- * client so the API can be developed and tested without external services.
- * A future ORM adapter should map these interfaces to tables/collections.
+ * TypeScript mirror of the PostgreSQL schema in database/migrations.
+ * Amounts are integer minor units (ARS centavos) and every operational record
+ * carries organizationId. Use repository queries with TenantContext as well.
  */
 
 export type Id = string;
 export type IsoDateTime = string;
+export type JsonObject = Record<string, unknown>;
 
 export interface Timestamped {
   id: Id;
@@ -13,7 +14,6 @@ export interface Timestamped {
   updatedAt: IsoDateTime;
 }
 
-/** Every business record is isolated by this field. */
 export interface OrganizationScoped {
   organizationId: Id;
 }
@@ -22,62 +22,92 @@ export interface Organization extends Timestamped {
   name: string;
   legalName?: string;
   taxId?: string;
+  taxCondition?: string;
   countryCode: "AR" | string;
   currency: "ARS" | string;
   timezone: string;
-  status: "active" | "suspended" | "archived";
+  locale: string;
+  settings: JsonObject;
+  status: "ACTIVE" | "SUSPENDED" | "ARCHIVED";
 }
-
-export type UserRole = "platform_admin" | "owner" | "sales" | "inventory" | "viewer";
 
 export interface User extends Timestamped {
   email: string;
   displayName: string;
-  passwordHash: string;
-  role: UserRole;
-  organizationId?: Id;
-  status: "invited" | "active" | "disabled";
-  mustChangePassword: boolean;
+  /** Argon2id hash only; it is absent until an invitation is activated. */
+  passwordHash?: string;
+  passwordChangedAt?: IsoDateTime;
+  passwordVersion: number;
+  status: "INVITED" | "ACTIVE" | "SUSPENDED";
   twoFactorEnabled: boolean;
+  /** Encrypted at application level; never return it in API responses. */
+  twoFactorSecretEncrypted?: string;
   lastLoginAt?: IsoDateTime;
 }
 
-export interface ProductCategory extends Timestamped, OrganizationScoped {
-  name: string;
-  description?: string;
-  /** Editable defaults such as tone, volume or fragrance. */
-  attributes: ProductAttributeDefinition[];
+export type PlatformRole = "SUPER_ADMIN";
+export type OrganizationRole = "OWNER" | "SALES" | "INVENTORY_FULFILLMENT" | "VIEWER";
+
+export interface OrganizationMembership extends Timestamped, OrganizationScoped {
+  userId: Id;
+  role: OrganizationRole;
   active: boolean;
 }
 
-export interface ProductAttributeDefinition {
+export interface UserInvitation extends OrganizationScoped {
+  id: Id;
+  email: string;
+  displayName: string;
+  role: OrganizationRole;
+  /** Hash only: the plaintext activation token must not be persisted. */
+  tokenHash: string;
+  expiresAt: IsoDateTime;
+  acceptedAt?: IsoDateTime;
+  revokedAt?: IsoDateTime;
+}
+
+export interface ProductAttributeDefinition extends Timestamped, OrganizationScoped {
+  categoryId: Id;
   key: string;
   label: string;
-  mode: "variant" | "informational";
+  dataType: "TEXT" | "NUMBER" | "BOOLEAN" | "SELECT";
+  purpose: "VARIANT" | "INFORMATIONAL";
   required: boolean;
-  suggestedValues: string[];
+  suggestedValues: unknown[];
+  position: number;
+}
+
+export interface ProductCategory extends Timestamped, OrganizationScoped {
+  parentCategoryId?: Id;
+  name: string;
+  slug: string;
+  description?: string;
+  active: boolean;
 }
 
 export interface Product extends Timestamped, OrganizationScoped {
-  categoryId?: Id;
+  categoryId: Id;
   supplierId?: Id;
   name: string;
+  slug: string;
   brand?: string;
   description?: string;
-  status: "active" | "paused" | "discontinued";
+  status: "ACTIVE" | "PAUSED" | "DISCONTINUED";
+  informationalAttributes: JsonObject;
+  trackInventory: boolean;
   trackLots: boolean;
   trackExpiry: boolean;
-  tags: string[];
 }
 
 export interface ProductVariant extends Timestamped, OrganizationScoped {
   productId: Id;
+  name: string;
   sku: string;
   barcode?: string;
-  attributes: Record<string, string>;
-  retailPrice: number;
-  wholesalePrice?: number;
-  reorderPoint?: number;
+  attributes: JsonObject;
+  retailPriceMinor: number;
+  wholesalePriceMinor?: number;
+  lowStockThreshold?: number;
   active: boolean;
 }
 
@@ -87,136 +117,175 @@ export interface Supplier extends Timestamped, OrganizationScoped {
   email?: string;
   phone?: string;
   notes?: string;
+  active: boolean;
+}
+
+/** A lot is a FIFO cost layer, not another owner-facing product. */
+export interface InventoryLot extends Timestamped, OrganizationScoped {
+  productVariantId: Id;
+  supplierId?: Id;
+  lotCode?: string;
+  receivedAt: IsoDateTime;
+  expiresAt?: IsoDateTime;
+  unitCostMinor: number;
+  initialQuantity: number;
+  availableQuantity: number;
+  reservedQuantity: number;
+}
+
+export interface InventoryLevel extends OrganizationScoped {
+  productVariantId: Id;
+  onHandQuantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  lowStockThreshold?: number;
+  updatedAt: IsoDateTime;
 }
 
 export type InventoryMovementType =
-  | "purchase_receipt"
-  | "reservation"
-  | "reservation_release"
-  | "sale"
-  | "return"
-  | "adjustment"
-  | "expiry"
-  | "damage";
+  | "PURCHASE_RECEIPT"
+  | "RESERVATION_CREATED"
+  | "RESERVATION_RELEASED"
+  | "SALE_COMMITTED"
+  | "CUSTOMER_RETURN"
+  | "EXPIRATION_WRITE_OFF"
+  | "DAMAGE_OR_LOSS"
+  | "MANUAL_ADJUSTMENT";
 
-/**
- * Append-only stock ledger. Positive quantities add stock; negative values
- * consume it. Cost layers preserve FIFO profitability without duplicating a
- * product in the owner-facing catalogue.
- */
-export interface InventoryMovement extends Timestamped, OrganizationScoped {
+/** Append-only stock ledger. */
+export interface InventoryMovement extends OrganizationScoped {
+  id: Id;
   productVariantId: Id;
+  inventoryLotId?: Id;
   type: InventoryMovementType;
   quantityDelta: number;
   reservedQuantityDelta: number;
-  unitCost?: number;
-  lotCode?: string;
-  expiresAt?: string;
-  referenceType?: "purchase" | "order" | "return" | "adjustment";
+  unitCostMinor?: number;
+  referenceType?: "ORDER" | "PURCHASE" | "RETURN" | "ADJUSTMENT";
   referenceId?: Id;
   reason?: string;
-  createdByUserId: Id;
+  createdByUserId?: Id;
+  createdAt: IsoDateTime;
 }
 
 export interface Customer extends Timestamped, OrganizationScoped {
-  name: string;
+  firstName: string;
+  lastName?: string;
   phone: string;
   email?: string;
   instagramHandle?: string;
-  customerType: "retail" | "wholesale";
-  sourceChannel?: "whatsapp" | "instagram" | "other";
+  customerType: "RETAIL" | "WHOLESALE";
+  sourceChannel?: "WHATSAPP" | "INSTAGRAM" | "ONLINE_STORE" | "MARKETPLACE" | "OTHER";
+  addresses: unknown[];
+  tags: string[];
   notes?: string;
 }
 
 export type OrderStatus =
-  | "draft"
-  | "pending_payment"
-  | "confirmed"
-  | "preparing"
-  | "ready_to_ship"
-  | "completed"
-  | "cancelled";
+  | "DRAFT"
+  | "PENDING_PAYMENT"
+  | "CONFIRMED"
+  | "PREPARING"
+  | "READY_TO_SHIP"
+  | "COMPLETED"
+  | "CANCELLED";
 
 export interface Order extends Timestamped, OrganizationScoped {
   orderNumber: string;
   customerId: Id;
-  channel: "whatsapp" | "instagram" | "other";
+  channel: "WHATSAPP" | "INSTAGRAM" | "ONLINE_STORE" | "MARKETPLACE" | "OTHER";
   status: OrderStatus;
-  currency: string;
-  subtotal: number;
-  discountTotal: number;
-  shippingTotal: number;
-  grandTotal: number;
+  reservationStatus: "NONE" | "ACTIVE" | "RELEASED" | "EXPIRED" | "CONSUMED";
   reservationExpiresAt?: IsoDateTime;
-  notes?: string;
-  internalNotes?: string;
-  createdByUserId: Id;
+  currency: string;
+  subtotalMinor: number;
+  discountTotalMinor: number;
+  shippingTotalMinor: number;
+  grandTotalMinor: number;
+  paidAmountMinor: number;
+  outstandingAmountMinor: number;
+  createdByUserId?: Id;
 }
 
 export interface OrderLine extends Timestamped, OrganizationScoped {
   orderId: Id;
   productVariantId: Id;
-  descriptionSnapshot: string;
+  productNameSnapshot: string;
+  variantNameSnapshot: string;
+  skuSnapshot: string;
   quantity: number;
-  unitPrice: number;
-  discountTotal: number;
-  allocatedCostTotal?: number;
+  unitPriceMinor: number;
+  discountMinor: number;
+  lineTotalMinor: number;
+  allocatedCostMinor?: number;
 }
 
-export type PaymentStatus = "pending" | "confirmed" | "rejected" | "refunded";
+export interface StockReservation extends Timestamped, OrganizationScoped {
+  orderId: Id;
+  orderLineId?: Id;
+  productVariantId: Id;
+  inventoryLotId?: Id;
+  quantity: number;
+  status: "ACTIVE" | "RELEASED" | "EXPIRED" | "CONSUMED";
+  expiresAt?: IsoDateTime;
+  releasedAt?: IsoDateTime;
+  releaseReason?: "CANCELLED" | "EXPIRED" | "MANUAL";
+}
 
 export interface Payment extends Timestamped, OrganizationScoped {
   orderId: Id;
-  method: string;
-  amount: number;
-  feeAmount: number;
-  status: PaymentStatus;
-  reference?: string;
+  method: "BANK_TRANSFER" | "MERCADO_PAGO" | "CASH_ON_DELIVERY" | "CARD" | "OTHER";
+  amountMinor: number;
+  feeAmountMinor?: number;
+  status: "PENDING" | "CONFIRMED" | "REJECTED" | "REFUNDED";
+  externalReference?: string;
   proofUrl?: string;
   confirmedAt?: IsoDateTime;
   confirmedByUserId?: Id;
 }
 
-export type ShipmentStatus = "not_required" | "pending" | "preparing" | "dispatched" | "delivered" | "returned";
-
 export interface Shipment extends Timestamped, OrganizationScoped {
   orderId: Id;
-  method: string;
-  status: ShipmentStatus;
-  recipientName: string;
-  address?: string;
+  method: "PICKUP" | "POSTAL_CARRIER" | "COURIER" | "OWN_DELIVERY" | "OTHER";
+  status: "NOT_REQUIRED" | "PENDING" | "PREPARING" | "READY_FOR_PICKUP" | "DISPATCHED" | "DELIVERED" | "RETURNED";
+  recipientAddress?: JsonObject;
   trackingCode?: string;
   carrier?: string;
-  cost: number;
-  paidBy: "customer" | "organization" | "shared";
-  dispatchedAt?: IsoDateTime;
-  deliveredAt?: IsoDateTime;
-  notes?: string;
+  chargedAmountMinor: number;
+  businessCostMinor?: number;
 }
 
 /** Immutable security and operational history. */
-export interface AuditLog extends Timestamped, OrganizationScoped {
+export interface AuditLog extends OrganizationScoped {
+  id: Id;
   actorUserId?: Id;
   action: string;
   entityType: string;
-  entityId: Id;
-  before?: Record<string, unknown>;
-  after?: Record<string, unknown>;
+  entityId?: Id;
+  before?: JsonObject;
+  after?: JsonObject;
   ipAddress?: string;
   userAgent?: string;
+  occurredAt: IsoDateTime;
 }
 
 export interface DatabaseSchema {
   organizations: Organization;
   users: User;
+  memberships: OrganizationMembership;
+  invitations: UserInvitation;
   categories: ProductCategory;
+  categoryAttributes: ProductAttributeDefinition;
   products: Product;
   productVariants: ProductVariant;
   suppliers: Supplier;
+  inventoryLots: InventoryLot;
+  inventoryLevels: InventoryLevel;
   inventoryMovements: InventoryMovement;
   customers: Customer;
   orders: Order;
   orderLines: OrderLine;
+  stockReservations: StockReservation;
   payments: Payment;
   shipments: Shipment;
   auditLogs: AuditLog;

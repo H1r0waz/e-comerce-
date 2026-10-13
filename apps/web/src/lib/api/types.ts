@@ -1,0 +1,79 @@
+export type UserRole = "OWNER" | "SALES" | "INVENTORY_FULFILLMENT" | "VIEWER" | "SUPER_ADMIN";
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  organizationId: string;
+  organizationName: string;
+}
+
+export interface CommerceSession {
+  user: SessionUser;
+  expiresAt?: string;
+}
+
+export type OrderTone = "violet" | "amber" | "blue" | "green";
+
+export interface RecentOrder {
+  id: string;
+  customer: string;
+  items: string;
+  amount: string;
+  channel: "WhatsApp" | "Instagram" | string;
+  state: string;
+  tone: OrderTone;
+  initials: string;
+}
+
+export interface DashboardMetric {
+  label: string;
+  value: string;
+  detail: string;
+  trend?: string;
+}
+
+export interface DashboardAlert {
+  id: string;
+  kind: "payment" | "reservation" | "stock" | "expiration";
+  title: string;
+  detail: string;
+}
+
+export interface DashboardSnapshot {
+  generatedAt: string;
+  metrics: {
+    revenue: DashboardMetric;
+    ordersToPrepare: DashboardMetric;
+    lowStock: DashboardMetric;
+    pendingPayments: DashboardMetric;
+  };
+  alerts: DashboardAlert[];
+  orders: RecentOrder[];
+  channelSales: {
+    total: string;
+    trend: string;
+    values: number[];
+    distribution: { label: string; value: string; color: "purple" | "pink" }[];
+  };
+}
+
+export interface SignInInput {
+  email: string;
+  password: string;
+}
+
+export interface AcceptInvitationInput {
+  invitationToken: string;
+  displayName: string;
+  password: string;
+}
+
+export interface CommerceApi {
+  getSession(): Promise<CommerceSession | null>;
+  signIn(input: SignInInput): Promise<CommerceSession>;
+  acceptInvitation(input: AcceptInvitationInput): Promise<CommerceSession>;
+  signOut(): Promise<void>;
+  getDashboard(): Promise<DashboardSnapshot>;
+}
