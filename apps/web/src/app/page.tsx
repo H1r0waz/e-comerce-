@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { OrdersView } from "../components/OrdersView";
 import { ProductsView } from "../components/ProductsView";
 import { SessionGate, useCommerceSession } from "../components/SessionGate";
@@ -89,18 +89,28 @@ function Dashboard() {
   const [range, setRange] = useState("7 días");
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
-  const showToast = (message: string) => {
+  const [dashboardError, setDashboardError] = useState(false);
+  const toastTimer = useRef<number | undefined>(undefined);
+  const showToast = useCallback((message: string) => {
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
     setToast(message);
-    window.setTimeout(() => setToast(""), 2500);
-  };
-  useEffect(() => {
-    let cancelled = false;
-    api.getDashboard()
-      .then((data) => { if (!cancelled) setSnapshot(data); })
-      .catch(() => { if (!cancelled) showToast("No pudimos actualizar el resumen. Volvé a intentar en unos minutos."); })
-      .finally(() => { if (!cancelled) setLoadingDashboard(false); });
-    return () => { cancelled = true; };
+    toastTimer.current = window.setTimeout(() => setToast(""), 2500);
+  }, []);
+  const refreshDashboard = useCallback(async () => {
+    setLoadingDashboard(true);
+    setDashboardError(false);
+    try {
+      setSnapshot(await api.getDashboard());
+    } catch {
+      setDashboardError(true);
+    } finally {
+      setLoadingDashboard(false);
+    }
   }, [api]);
+  useEffect(() => {
+    void refreshDashboard();
+  }, [refreshDashboard]);
+  useEffect(() => () => { if (toastTimer.current) window.clearTimeout(toastTimer.current); }, []);
   const userFirstName = session.user.displayName.split(" ")[0] || "";
   const initials = session.user.displayName.split(" ").map((word) => word[0]).join("").slice(0, 2).toUpperCase();
 
@@ -112,7 +122,7 @@ function Dashboard() {
         <nav aria-label="Navegación principal">
           {navItems.map((item) => <button key={item.label} className={`nav-link ${active === item.label ? "active" : ""}`} onClick={() => setActive(item.label)}><Icon name={item.icon} size={19} /><span>{item.label}</span>{item.label === "Pedidos" && <b>5</b>}</button>)}
         </nav>
-        <div className="sidebar-bottom"><button className="nav-link" onClick={() => setActive("Configuración")}><Icon name="settings" size={19} /><span>Configuración</span></button><div className="profile"><span className="avatar owner">{initials}</span><span><strong>{session.user.displayName}</strong><small>{session.user.role === "OWNER" ? "Propietaria" : session.user.role}</small></span><button className="profile-menu" onClick={() => void signOut()} aria-label="Cerrar sesión"><Icon name="dots" size={18} /></button></div></div>
+        <div className="sidebar-bottom"><button className="nav-link" onClick={() => setActive("Configuración")}><Icon name="settings" size={19} /><span>Configuración</span></button><div className="profile"><span className="avatar owner">{initials}</span><span><strong>{session.user.displayName}</strong><small>{session.user.role === "OWNER" ? "Propietaria" : session.user.role}</small></span><button className="profile-menu" onClick={() => { void signOut().catch(() => showToast("No pudimos cerrar la sesión. Probá nuevamente.")); }} aria-label="Cerrar sesión"><Icon name="dots" size={18} /></button></div></div>
       </aside>
 
       <section className="content">
@@ -126,7 +136,8 @@ function Dashboard() {
 
         {active === "Productos" ? <ProductsView /> : active === "Pedidos" ? <OrdersView /> : <>
         <div className="page-heading"><div><h2>Resumen de hoy</h2><p>Todo lo importante de tu negocio, en un solo lugar.</p></div><button className="date-filter" onClick={() => setRange(range === "7 días" ? "30 días" : "7 días")}>Últimos {range}<Icon name="chevron" size={16} /></button></div>
-        {usingMockApi && <p className="integration-notice">Vista de demostración: el adaptador local será reemplazado por el API protegido al configurar <code>NEXT_PUBLIC_API_URL</code>.</p>}
+        {usingMockApi && <p className="integration-notice">Vista de demostración local: no persiste datos y solo se habilita durante el desarrollo.</p>}
+        {dashboardError && <p className="dashboard-error" role="status">No pudimos actualizar el resumen. <button type="button" onClick={() => void refreshDashboard()}>Reintentar</button></p>}
 
         <section className="kpi-grid">
           <article className="kpi-card revenue"><div className="kpi-icon"><Icon name="chart" size={20} /></div><div className="kpi-label">{snapshot?.metrics.revenue.label ?? "Ventas cobradas hoy"} <span className="trend">{snapshot?.metrics.revenue.trend ?? "—"}</span></div><strong>{snapshot?.metrics.revenue.value ?? "—"}</strong><small>{snapshot?.metrics.revenue.detail ?? "Actualizando datos…"}</small><div className="sparkline"><svg viewBox="0 0 260 54" preserveAspectRatio="none"><path d="M0 45 C18 46 20 33 38 37 S58 21 73 31 S103 32 112 23 S133 33 149 18 S176 23 187 12 S217 23 229 8 S244 10 260 1" /></svg></div></article>

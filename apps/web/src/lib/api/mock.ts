@@ -1,4 +1,4 @@
-import type { AcceptInvitationInput, CommerceApi, CommerceSession, DashboardSnapshot, SignInInput } from "./types";
+import type { AcceptInvitationInput, AuthenticationResult, CommerceApi, CommerceSession, DashboardSnapshot, SignInInput, VerifyMfaInput } from "./types";
 
 const dashboard: DashboardSnapshot = {
   generatedAt: "2026-10-13T12:00:00.000Z",
@@ -39,18 +39,22 @@ export class MockCommerceApi implements CommerceApi {
     return this.session;
   }
 
-  async signIn(input: SignInInput): Promise<CommerceSession> {
+  async signIn(input: SignInInput): Promise<AuthenticationResult> {
     if (!input.email.trim() || !input.password) throw new Error("Ingresá tu correo y contraseña.");
     this.session = this.createSession(input.email, "Agustina M.");
-    return this.session;
+    return { status: "authenticated", session: this.session };
   }
 
-  async acceptInvitation(input: AcceptInvitationInput): Promise<CommerceSession> {
+  async acceptInvitation(input: AcceptInvitationInput): Promise<AuthenticationResult> {
     if (!input.invitationToken.trim() || !input.displayName.trim() || input.password.length < 12) {
       throw new Error("Completá los datos y elegí una contraseña de al menos 12 caracteres.");
     }
     this.session = this.createSession("nuevo.usuario@bruma.demo", input.displayName);
-    return this.session;
+    return { status: "authenticated", session: this.session };
+  }
+
+  async verifyMfa(_input: VerifyMfaInput): Promise<void> {
+    // The local adapter does not model MFA. Production always delegates this to the API.
   }
 
   async signOut(): Promise<void> {

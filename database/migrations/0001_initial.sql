@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS app_users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text NOT NULL,
   display_name text NOT NULL CHECK (length(btrim(display_name)) > 0),
-  -- Argon2id hash only. Invited users receive their first hash on activation.
+  -- Algorithm-tagged password hash only. Invited users receive their first hash on activation.
   password_hash text,
   password_changed_at timestamptz,
   password_version integer NOT NULL DEFAULT 1 CHECK (password_version > 0),
@@ -708,7 +708,7 @@ COMMENT ON TABLE audit_logs IS
 COMMENT ON COLUMN user_invitations.token_hash IS
   'Hash of a one-time activation secret; never persist the plaintext token.';
 COMMENT ON COLUMN app_users.password_hash IS
-  'Argon2id password hash only; plaintext passwords never reach persistence.';
+  'Algorithm-tagged password hash only; plaintext passwords never reach persistence.';
 COMMENT ON COLUMN app_users.two_factor_secret_encrypted IS
   'Application-layer encrypted TOTP secret. Platform super-admins must have MFA enabled.';
 

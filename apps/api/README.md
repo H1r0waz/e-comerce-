@@ -1,6 +1,8 @@
 # Commerce API
 
-Initial TypeScript API for the multi-tenant sales and inventory platform. It uses only Node's built-in HTTP server, so it starts without a database. Domain persistence is represented by the schema in `../../packages/database` and must be provided by repository adapters in later iterations.
+TypeScript API for the multi-tenant sales and inventory platform. It exposes authenticated HTTP endpoints backed by Neon PostgreSQL when `DATABASE_URL` and `MFA_ENCRYPTION_KEY` are configured. Without those values it only exposes the health check, never an in-memory fallback.
+
+For Vercel, deploy this directory as a separate API project. `api/index.ts` is a Node.js Function entry point; `vercel.json` rewrites `/v1/*` and `/health` to it. The web project should access it through its same-origin `/api/backend` proxy so session cookies never become third-party cookies.
 
 ## Run locally
 

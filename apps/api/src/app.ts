@@ -4,14 +4,29 @@ import type { AppConfig } from "./config/env.js";
 import { createRequestContext, sendJson, sendNotFound } from "./lib/http.js";
 import { AuthorizationError, requireTenantContext, securityHeaders } from "./lib/security.js";
 import { modules } from "./modules/index.js";
+import type { ApiRouteHandler } from "./routes/index.js";
+
+export interface AppDependencies {
+  apiRouteHandler?: ApiRouteHandler;
+}
 
 function applySecurityHeaders(request: IncomingMessage, response: ServerResponse): void {
   for (const [name, value] of Object.entries(securityHeaders(request))) response.setHeader(name, value);
 }
 
-export function createApp(config: AppConfig) {
+export function createApp(config: AppConfig, dependencies: AppDependencies = {}) {
   const startedAt = new Date().toISOString();
   return createServer((request, response) => {
+    void dispatch(request, response).catch(() => {
+      if (!response.headersSent) {
+        sendJson(response, 500, { error: { code: "internal_error", message: "No pudimos completar la solicitud." }, requestId: randomUUID() });
+      } else {
+        response.destroy();
+      }
+    });
+  });
+
+  async function dispatch(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const requestId = randomUUID();
     const context = createRequestContext(request, requestId);
     applySecurityHeaders(request, response);
@@ -27,6 +42,8 @@ export function createApp(config: AppConfig) {
       return;
     }
 
+    if (dependencies.apiRouteHandler && await dependencies.apiRouteHandler(request, response, requestId)) return;
+
     if (context.method === "GET" && context.pathname === "/v1/modules") {
       try {
         requireTenantContext(request, context);
@@ -39,5 +56,5 @@ export function createApp(config: AppConfig) {
     }
 
     sendNotFound(response, requestId);
-  });
+  }
 }

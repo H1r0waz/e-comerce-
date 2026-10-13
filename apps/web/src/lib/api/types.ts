@@ -14,6 +14,12 @@ export interface CommerceSession {
   expiresAt?: string;
 }
 
+export type AuthenticationResult =
+  | { status: "authenticated"; session: CommerceSession }
+  | { status: "mfa_required" }
+  | { status: "session_ready" }
+  | { status: "invitation_accepted" };
+
 export type OrderTone = "violet" | "amber" | "blue" | "green";
 
 export interface RecentOrder {
@@ -70,10 +76,16 @@ export interface AcceptInvitationInput {
   password: string;
 }
 
+export interface VerifyMfaInput {
+  code: string;
+  useRecoveryCode?: boolean;
+}
+
 export interface CommerceApi {
   getSession(): Promise<CommerceSession | null>;
-  signIn(input: SignInInput): Promise<CommerceSession>;
-  acceptInvitation(input: AcceptInvitationInput): Promise<CommerceSession>;
+  signIn(input: SignInInput): Promise<AuthenticationResult>;
+  acceptInvitation(input: AcceptInvitationInput): Promise<AuthenticationResult>;
+  verifyMfa(input: VerifyMfaInput): Promise<void>;
   signOut(): Promise<void>;
   getDashboard(): Promise<DashboardSnapshot>;
 }
