@@ -5,6 +5,7 @@ import { ApiError } from "../lib/api/client";
 import type {
   CatalogProduct,
   CreateOrderInput,
+  FulfillmentStatus,
   OrderListItem,
   PaymentMethod,
 } from "../lib/api/types";
@@ -111,6 +112,19 @@ export function OrdersView() {
       setNotice(`Pago del pedido #${updated.orderNumber} confirmado. Ya está listo para preparar.`);
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : "No pudimos confirmar el pago.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const transitionFulfillment = async (order: OrderListItem, status: FulfillmentStatus) => {
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await api.transitionFulfillment({ orderId: order.id, status });
+      setOrders((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setNotice(`Pedido #${updated.orderNumber}: ${statusLabel(updated.status)}.`);
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "No pudimos actualizar el pedido.");
     } finally {
       setSaving(false);
     }
@@ -231,6 +245,19 @@ export function OrdersView() {
                   }}
                 >
                   Confirmar pago
+                </button>
+              )}
+              {nextFulfillmentAction(order.status) && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={saving}
+                  onClick={() => {
+                    const action = nextFulfillmentAction(order.status);
+                    if (action) void transitionFulfillment(order, action.status);
+                  }}
+                >
+                  {nextFulfillmentAction(order.status)?.label}
                 </button>
               )}
             </div>
@@ -495,4 +522,11 @@ function tone(status: OrderListItem["status"]): string {
       : status === "CANCELLED"
         ? "blue"
         : "violet";
+}
+
+function nextFulfillmentAction(status: OrderListItem["status"]): { status: FulfillmentStatus; label: string } | null {
+  if (status === "CONFIRMED") return { status: "PREPARING", label: "Iniciar preparación" };
+  if (status === "PREPARING") return { status: "READY_TO_SHIP", label: "Marcar listo para enviar" };
+  if (status === "READY_TO_SHIP") return { status: "COMPLETED", label: "Marcar entregado" };
+  return null;
 }

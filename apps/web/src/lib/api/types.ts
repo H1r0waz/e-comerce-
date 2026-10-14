@@ -101,6 +101,7 @@ export interface ReceiveStockInput {
 
 export type OrderChannel = "WHATSAPP" | "INSTAGRAM" | "ONLINE_STORE" | "MARKETPLACE" | "OTHER";
 export type PaymentMethod = "BANK_TRANSFER" | "MERCADO_PAGO" | "CASH_ON_DELIVERY" | "CARD" | "OTHER";
+export type FulfillmentStatus = "PREPARING" | "READY_TO_SHIP" | "COMPLETED";
 
 export interface OrderListItem {
   id: string;
@@ -147,4 +148,5 @@ export interface CommerceApi {
   listOrders(): Promise<OrderListItem[]>;
   createOrder(input: CreateOrderInput): Promise<OrderListItem>;
   confirmPayment(input: { orderId: string; method: PaymentMethod }): Promise<OrderListItem>;
+  transitionFulfillment(input: { orderId: string; status: FulfillmentStatus }): Promise<OrderListItem>;
 }

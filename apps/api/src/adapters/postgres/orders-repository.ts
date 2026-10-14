@@ -1,5 +1,5 @@
 import { withTransaction, type PostgresPool, type PostgresQueryClient } from "./types.js";
-import type { OrderChannel, OrderListItemResponse, PaymentMethod } from "../../routes/types.js";
+import type { FulfillmentStatus, OrderChannel, OrderListItemResponse, PaymentMethod } from "../../routes/types.js";
 
 export interface CreatePendingPaymentOrderInput {
   organizationId: string;
@@ -188,6 +188,30 @@ export class PostgresOrdersRepository {
     });
   }
 
+  async transitionFulfillment(input: { organizationId: string; actorUserId: string; orderId: string; status: FulfillmentStatus }): Promise<OrderListItemResponse> {
+    return withTransaction(this.pool, async (client) => {
+      const locked = await client.query<{ id: string; status: string }>(
+        "SELECT id, status FROM orders WHERE id = $1 AND organization_id = $2 FOR UPDATE",
+        [input.orderId, input.organizationId]
+      );
+      const order = locked.rows[0];
+      if (!order) throw new OrderValidationError("No encontramos ese pedido.");
+      if (!isAllowedFulfillmentTransition(order.status, input.status)) {
+        throw new OrderValidationError("Ese pedido no puede avanzar a ese estado todavía.");
+      }
+      await client.query(
+        "UPDATE orders SET status = $3 WHERE organization_id = $1 AND id = $2",
+        [input.organizationId, input.orderId, input.status]
+      );
+      await client.query(
+        `INSERT INTO audit_logs (organization_id, actor_user_id, action, entity_type, entity_id, after_value)
+         VALUES ($1, $2, 'order.fulfillment_transitioned', 'order', $3, $4::jsonb)`,
+        [input.organizationId, input.actorUserId, input.orderId, JSON.stringify({ from: order.status, to: input.status })]
+      );
+      return this.findOrderWithClient(client, input.organizationId, input.orderId);
+    });
+  }
+
   private async findOrCreateCustomer(client: PostgresQueryClient, input: CreatePendingPaymentOrderInput): Promise<CustomerRow> {
     const existing = await client.query<CustomerRow>(
       `SELECT id, first_name, last_name, phone FROM customers WHERE organization_id = $1 AND phone = $2 ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
@@ -308,3 +332,9 @@ function numberValue(value: string | number | null | undefined): number {
 }
 
 function asIso(value: Date | string): string { return value instanceof Date ? value.toISOString() : new Date(value).toISOString(); }
+
+function isAllowedFulfillmentTransition(current: string, next: FulfillmentStatus): boolean {
+  return (current === "CONFIRMED" && next === "PREPARING")
+    || (current === "PREPARING" && next === "READY_TO_SHIP")
+    || (current === "READY_TO_SHIP" && next === "COMPLETED");
+}

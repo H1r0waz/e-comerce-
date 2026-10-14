@@ -8,6 +8,7 @@ import type {
   CreateProductInput,
   CreateOrderInput,
   DashboardSnapshot,
+  FulfillmentStatus,
   OrderListItem,
   PaymentMethod,
   ReceiveStockInput,
@@ -68,6 +69,10 @@ class HttpCommerceApi implements CommerceApi {
     return this.request("/v1/orders/payment-confirmations", { method: "POST", body: input });
   }
 
+  transitionFulfillment(input: { orderId: string; status: FulfillmentStatus }): Promise<OrderListItem> {
+    return this.request("/v1/orders/fulfillment-transitions", { method: "POST", body: input });
+  }
+
   private async request<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
     let response: Response;
     try {
@@ -118,6 +123,7 @@ class UnconfiguredCommerceApi implements CommerceApi {
   listOrders(): Promise<OrderListItem[]> { return Promise.reject(new ApiConfigurationError(this.message)); }
   createOrder(): Promise<OrderListItem> { return Promise.reject(new ApiConfigurationError(this.message)); }
   confirmPayment(): Promise<OrderListItem> { return Promise.reject(new ApiConfigurationError(this.message)); }
+  transitionFulfillment(): Promise<OrderListItem> { return Promise.reject(new ApiConfigurationError(this.message)); }
 }
 
 type ApiEnvelope<T> = { data?: T; error?: { code?: unknown } };

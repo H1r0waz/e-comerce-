@@ -158,6 +158,7 @@ export interface CatalogRouteRepository {
 
 export type OrderChannel = "WHATSAPP" | "INSTAGRAM" | "ONLINE_STORE" | "MARKETPLACE" | "OTHER";
 export type PaymentMethod = "BANK_TRANSFER" | "MERCADO_PAGO" | "CASH_ON_DELIVERY" | "CARD" | "OTHER";
+export type FulfillmentStatus = "PREPARING" | "READY_TO_SHIP" | "COMPLETED";
 
 export interface OrderListItemResponse {
   id: string;
@@ -189,6 +190,12 @@ export interface OrdersRouteRepository {
     actorUserId: string;
     orderId: string;
     method: PaymentMethod;
+  }): Promise<OrderListItemResponse>;
+  transitionFulfillment(input: {
+    organizationId: string;
+    actorUserId: string;
+    orderId: string;
+    status: FulfillmentStatus;
   }): Promise<OrderListItemResponse>;
 }
 

@@ -10,6 +10,7 @@ import type {
   CatalogProductResponse,
   CommerceRole,
   CommerceSessionResponse,
+  FulfillmentStatus,
   OrderChannel,
   OrderListItemResponse,
   PaymentMethod,
@@ -201,6 +202,20 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
         return true;
       }
 
+      if (method === "POST" && pathname === "/v1/orders/fulfillment-transitions") {
+        const session = await requireCommerceSession(request, dependencies);
+        requireFulfillmentWrite(session.user.role);
+        const body = await readJsonObject(request);
+        const order = await requireOrdersRepository(dependencies).transitionFulfillment({
+          organizationId: session.user.organizationId,
+          actorUserId: session.user.id,
+          orderId: requiredString(body, "orderId", 128),
+          status: requiredFulfillmentStatus(body)
+        });
+        sendData<OrderListItemResponse>(response, 200, order, requestId);
+        return true;
+      }
+
       if (method === "GET" && pathname === "/v1/dashboard") {
         const session = await requireCommerceSession(request, dependencies, undefined, optionalQueryString(url, "organizationId", 128));
         const data = await dependencies.dashboardRepository.getDashboard({
@@ -275,6 +290,12 @@ function requireOrderWrite(role: CommerceRole): void {
   }
 }
 
+function requireFulfillmentWrite(role: CommerceRole): void {
+  if (!( ["OWNER", "INVENTORY_FULFILLMENT", "SUPER_ADMIN"] as const).includes(role as "OWNER" | "INVENTORY_FULFILLMENT" | "SUPER_ADMIN")) {
+    throw new ForbiddenError("This role cannot prepare orders.");
+  }
+}
+
 function toSessionUser(
   context: AuthenticatedSession,
   membership: { organizationId: string; organizationName: string; role: Exclude<CommerceRole, "SUPER_ADMIN"> }
@@ -292,13 +313,13 @@ function toSessionUser(
 
 function isKnownRoute(method: string, pathname: string): boolean {
   const routes = [
-    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/orders/payment-confirmations", "/v1/dashboard",
+    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/orders/payment-confirmations", "/v1/orders/fulfillment-transitions", "/v1/dashboard",
     "/v1/bootstrap/super-admin/complete"
   ];
   return (method === "OPTIONS" && routes.includes(pathname))
     || (method === "GET" && ["/v1/auth/session", "/v1/catalog/products", "/v1/orders", "/v1/dashboard"].includes(pathname))
     || (method === "DELETE" && pathname === "/v1/auth/session")
-    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/bootstrap/super-admin/complete", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/orders/payment-confirmations"].includes(pathname));
+    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/bootstrap/super-admin/complete", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/orders/payment-confirmations", "/v1/orders/fulfillment-transitions"].includes(pathname));
 }
 
 function isStateChanging(method: string): boolean {
@@ -410,6 +431,14 @@ function requiredPaymentMethod(body: Record<string, unknown>): PaymentMethod {
     throw new HttpRouteError(400, "invalid_request", "La solicitud contiene campos inválidos.");
   }
   return value as PaymentMethod;
+}
+
+function requiredFulfillmentStatus(body: Record<string, unknown>): FulfillmentStatus {
+  const status = requiredString(body, "status", 30);
+  if (!(["PREPARING", "READY_TO_SHIP", "COMPLETED"] as const).includes(status as FulfillmentStatus)) {
+    throw new HttpRouteError(400, "invalid_request", "La solicitud contiene campos inválidos.");
+  }
+  return status as FulfillmentStatus;
 }
 
 function optionalQueryString(url: URL, key: string, maximumLength: number): string | undefined {

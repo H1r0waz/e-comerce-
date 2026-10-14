@@ -318,6 +318,7 @@ test("catalog write routes reject a sales-only user", async () => {
 test("order routes create pending-payment sales under the authenticated commerce", async () => {
   const created: Array<Record<string, unknown>> = [];
   const confirmed: Array<Record<string, unknown>> = [];
+  const transitioned: Array<Record<string, unknown>> = [];
   const order = {
     id: "order-1", orderNumber: "000001", customerName: "Sofía", customerPhone: "+5491112345678",
     channel: "WHATSAPP" as const, status: "PENDING_PAYMENT" as const, totalMinor: 2450000,
@@ -330,6 +331,10 @@ test("order routes create pending-payment sales under the authenticated commerce
       async confirmPayment(input) {
         confirmed.push(input);
         return { ...order, status: "CONFIRMED" as const };
+      },
+      async transitionFulfillment(input) {
+        transitioned.push(input);
+        return { ...order, status: input.status };
       }
     }
   });
@@ -362,6 +367,16 @@ test("order routes create pending-payment sales under the authenticated commerce
     assert.equal(((await json(payment)).data as { status: string }).status, "CONFIRMED");
     assert.deepEqual(confirmed, [{
       organizationId: "org-1", actorUserId: "user-1", orderId: "order-1", method: "MERCADO_PAGO"
+    }]);
+
+    const fulfillment = await fetch(`${origin}/v1/orders/fulfillment-transitions`, {
+      method: "POST", headers,
+      body: JSON.stringify({ orderId: "order-1", status: "PREPARING" })
+    });
+    assert.equal(fulfillment.status, 200);
+    assert.equal(((await json(fulfillment)).data as { status: string }).status, "PREPARING");
+    assert.deepEqual(transitioned, [{
+      organizationId: "org-1", actorUserId: "user-1", orderId: "order-1", status: "PREPARING"
     }]);
   });
 });

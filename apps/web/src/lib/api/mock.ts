@@ -1,4 +1,4 @@
-import type { AcceptInvitationInput, AuthenticationResult, CatalogProduct, CommerceApi, CommerceSession, CreateOrderInput, CreateProductInput, DashboardSnapshot, OrderListItem, PaymentMethod, ReceiveStockInput, SignInInput } from "./types";
+import type { AcceptInvitationInput, AuthenticationResult, CatalogProduct, CommerceApi, CommerceSession, CreateOrderInput, CreateProductInput, DashboardSnapshot, FulfillmentStatus, OrderListItem, PaymentMethod, ReceiveStockInput, SignInInput } from "./types";
 
 const dashboard: DashboardSnapshot = {
   generatedAt: "2026-10-13T12:00:00.000Z",
@@ -111,10 +111,25 @@ export class MockCommerceApi implements CommerceApi {
     return confirmed;
   }
 
+  async transitionFulfillment(input: { orderId: string; status: FulfillmentStatus }): Promise<OrderListItem> {
+    const index = this.orders.findIndex((order) => order.id === input.orderId);
+    const order = this.orders[index];
+    if (!order || !isAllowedFulfillmentTransition(order.status, input.status)) throw new Error("No podemos avanzar este pedido todavía.");
+    const updated = { ...order, status: input.status } as OrderListItem;
+    this.orders[index] = updated;
+    return updated;
+  }
+
   private createSession(email: string, displayName: string): CommerceSession {
     return {
       user: { id: "demo-user", email, displayName, role: "OWNER", organizationId: "demo-bruma", organizationName: "La Maison" },
       expiresAt: "2026-10-13T20:00:00.000Z",
     };
   }
+}
+
+function isAllowedFulfillmentTransition(current: OrderListItem["status"], next: FulfillmentStatus): boolean {
+  return (current === "CONFIRMED" && next === "PREPARING")
+    || (current === "PREPARING" && next === "READY_TO_SHIP")
+    || (current === "READY_TO_SHIP" && next === "COMPLETED");
 }
