@@ -6,7 +6,6 @@ import type {
   CommerceSession,
   DashboardSnapshot,
   SignInInput,
-  VerifyMfaInput,
 } from "./types";
 
 class HttpCommerceApi implements CommerceApi {
@@ -24,28 +23,11 @@ class HttpCommerceApi implements CommerceApi {
   }
 
   async signIn(input: SignInInput): Promise<AuthenticationResult> {
-    try {
-      return normalizeAuthenticationResult(await this.request<unknown>("/v1/auth/login", { method: "POST", body: input }));
-    } catch (error) {
-      if (error instanceof ApiError && error.code === "mfa_required") return { status: "mfa_required" };
-      throw error;
-    }
+    return normalizeAuthenticationResult(await this.request<unknown>("/v1/auth/login", { method: "POST", body: input }));
   }
 
   async acceptInvitation(input: AcceptInvitationInput): Promise<AuthenticationResult> {
-    try {
-      return normalizeAuthenticationResult(await this.request<unknown>("/v1/auth/invitations/accept", { method: "POST", body: input }), true);
-    } catch (error) {
-      if (error instanceof ApiError && error.code === "mfa_required") return { status: "mfa_required" };
-      throw error;
-    }
-  }
-
-  async verifyMfa(input: VerifyMfaInput): Promise<void> {
-    await this.request("/v1/auth/mfa/verify", {
-      method: "POST",
-      body: { code: input.code, recoveryCode: input.useRecoveryCode === true },
-    });
+    return normalizeAuthenticationResult(await this.request<unknown>("/v1/auth/invitations/accept", { method: "POST", body: input }), true);
   }
 
   async signOut(): Promise<void> {
@@ -98,7 +80,6 @@ class UnconfiguredCommerceApi implements CommerceApi {
   getSession(): Promise<CommerceSession | null> { return Promise.reject(new ApiConfigurationError(this.message)); }
   signIn(): Promise<AuthenticationResult> { return Promise.reject(new ApiConfigurationError(this.message)); }
   acceptInvitation(): Promise<AuthenticationResult> { return Promise.reject(new ApiConfigurationError(this.message)); }
-  verifyMfa(): Promise<void> { return Promise.reject(new ApiConfigurationError(this.message)); }
   signOut(): Promise<void> { return Promise.resolve(); }
   getDashboard(): Promise<DashboardSnapshot> { return Promise.reject(new ApiConfigurationError(this.message)); }
 }
@@ -118,7 +99,6 @@ function getErrorCode(payload: unknown): string {
 }
 
 function safeErrorMessage(status: number, code: string): string {
-  if (code === "mfa_required") return "Se requiere una verificación adicional.";
   if (status === 400 || status === 422) return "Revisá los datos ingresados e intentá nuevamente.";
   if (status === 401) return "No pudimos verificar tus credenciales.";
   if (status === 403) return "No tenés permiso para realizar esta acción.";
@@ -136,14 +116,8 @@ function extractSession(payload: unknown): CommerceSession | null {
 
 function normalizeAuthenticationResult(payload: unknown, acceptsInvitationOnly = false): AuthenticationResult {
   const candidate = unwrapData(payload as ApiEnvelope<unknown> | unknown);
-  if (candidate && typeof candidate === "object" && "requiresMfa" in candidate && (candidate as { requiresMfa?: unknown }).requiresMfa === true) {
-    return { status: "mfa_required" };
-  }
   const session = extractSession(candidate);
   if (session) return { status: "authenticated", session };
-  if (candidate && typeof candidate === "object" && "requiresMfa" in candidate && (candidate as { requiresMfa?: unknown }).requiresMfa === false) {
-    return { status: "session_ready" };
-  }
   if (acceptsInvitationOnly && candidate && typeof candidate === "object" && "user" in candidate) return { status: "invitation_accepted" };
   throw new ApiError(500, "invalid_response", "No pudimos completar la solicitud. Probá nuevamente en unos minutos.");
 }

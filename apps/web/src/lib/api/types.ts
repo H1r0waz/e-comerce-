@@ -16,7 +16,6 @@ export interface CommerceSession {
 
 export type AuthenticationResult =
   | { status: "authenticated"; session: CommerceSession }
-  | { status: "mfa_required" }
   | { status: "session_ready" }
   | { status: "invitation_accepted" };
 
@@ -76,16 +75,10 @@ export interface AcceptInvitationInput {
   password: string;
 }
 
-export interface VerifyMfaInput {
-  code: string;
-  useRecoveryCode?: boolean;
-}
-
 export interface CommerceApi {
   getSession(): Promise<CommerceSession | null>;
   signIn(input: SignInInput): Promise<AuthenticationResult>;
   acceptInvitation(input: AcceptInvitationInput): Promise<AuthenticationResult>;
-  verifyMfa(input: VerifyMfaInput): Promise<void>;
   signOut(): Promise<void>;
   getDashboard(): Promise<DashboardSnapshot>;
 }

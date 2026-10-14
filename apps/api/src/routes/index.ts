@@ -1,14 +1,13 @@
 import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { hashOpaqueToken } from "../lib/auth/tokens.js";
-import { AuthenticationError, BootstrapUnavailableError, ForbiddenError, MfaRequiredError } from "../modules/auth/authorization.js";
+import { AuthenticationError, BootstrapUnavailableError, ForbiddenError } from "../modules/auth/authorization.js";
 import type {
   ApiRouteDependencies,
   ApiRouteHandler,
   AuthenticatedSession,
   CommerceRole,
   CommerceSessionResponse,
-  MfaChallengeResponse,
   SessionUserResponse
 } from "./types.js";
 
@@ -72,10 +71,6 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
           ipPrefix: requestIpPrefix(request)
         });
         setSessionCookie(response, login.sessionToken, login.expiresAt, dependencies);
-        if (login.requiresMfa) {
-          sendData<MfaChallengeResponse>(response, 200, { requiresMfa: true }, requestId);
-          return true;
-        }
         const session = await requireCommerceSession(request, dependencies, login.sessionToken, organizationId);
         sendData(response, 200, session, requestId);
         return true;
@@ -97,25 +92,8 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
           ipPrefix: requestIpPrefix(request)
         });
         setSessionCookie(response, login.sessionToken, login.expiresAt, dependencies);
-        if (login.requiresMfa) {
-          sendData<MfaChallengeResponse>(response, 200, { requiresMfa: true }, requestId);
-          return true;
-        }
         const session = await requireCommerceSession(request, dependencies, login.sessionToken, membership.organizationId);
         sendData(response, 201, session, requestId);
-        return true;
-      }
-
-      if (method === "POST" && pathname === "/v1/auth/mfa/verify") {
-        const body = await readJsonObject(request);
-        const token = requireSessionToken(request);
-        await dependencies.auth.verifyMfaForSession({
-          sessionToken: token,
-          code: requiredString(body, "code", 32),
-          recoveryCode: optionalBoolean(body, "recoveryCode")
-        });
-        const session = await requireCommerceSession(request, dependencies, token);
-        sendData(response, 200, session, requestId);
         return true;
       }
 
@@ -201,13 +179,13 @@ function toSessionUser(
 
 function isKnownRoute(method: string, pathname: string): boolean {
   const routes = [
-    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/auth/mfa/verify", "/v1/dashboard",
+    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/dashboard",
     "/v1/bootstrap/super-admin/complete"
   ];
   return (method === "OPTIONS" && routes.includes(pathname))
     || (method === "GET" && ["/v1/auth/session", "/v1/dashboard"].includes(pathname))
     || (method === "DELETE" && pathname === "/v1/auth/session")
-    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/auth/mfa/verify", "/v1/bootstrap/super-admin/complete"].includes(pathname));
+    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/bootstrap/super-admin/complete"].includes(pathname));
 }
 
 function isStateChanging(method: string): boolean {
@@ -273,13 +251,6 @@ function optionalString(body: Record<string, unknown>, key: string, maximumLengt
   const value = body[key];
   if (value === undefined) return undefined;
   return requiredString(body, key, maximumLength);
-}
-
-function optionalBoolean(body: Record<string, unknown>, key: string): boolean | undefined {
-  const value = body[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== "boolean") throw new HttpRouteError(400, "invalid_request", "La solicitud contiene campos inválidos.");
-  return value;
 }
 
 function optionalQueryString(url: URL, key: string, maximumLength: number): string | undefined {
@@ -374,7 +345,6 @@ function logUnexpectedRouteError(error: unknown, requestId: string, pathname: st
 
 function toRouteError(error: unknown): HttpRouteError {
   if (error instanceof HttpRouteError) return error;
-  if (error instanceof MfaRequiredError) return new HttpRouteError(403, "mfa_required", "Necesitás verificar tu segundo factor.");
   if (error instanceof BootstrapUnavailableError) return new HttpRouteError(404, "not_found", "No encontramos el recurso solicitado.");
   if (error instanceof AuthenticationError) return new HttpRouteError(401, "unauthenticated", "Las credenciales no son válidas.");
   if (error instanceof ForbiddenError) return new HttpRouteError(403, "forbidden", "No tenés permisos para realizar esta acción.");

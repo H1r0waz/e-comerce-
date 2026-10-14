@@ -1,4 +1,4 @@
-import type { AcceptInvitationInput, AuthenticationResult, CommerceApi, CommerceSession, DashboardSnapshot, SignInInput, VerifyMfaInput } from "./types";
+import type { AcceptInvitationInput, AuthenticationResult, CommerceApi, CommerceSession, DashboardSnapshot, SignInInput } from "./types";
 
 const dashboard: DashboardSnapshot = {
   generatedAt: "2026-10-13T12:00:00.000Z",
@@ -51,10 +51,6 @@ export class MockCommerceApi implements CommerceApi {
     }
     this.session = this.createSession("nuevo.usuario@bruma.demo", input.displayName);
     return { status: "authenticated", session: this.session };
-  }
-
-  async verifyMfa(_input: VerifyMfaInput): Promise<void> {
-    // The local adapter does not model MFA. Production always delegates this to the API.
   }
 
   async signOut(): Promise<void> {
