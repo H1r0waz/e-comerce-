@@ -19,9 +19,12 @@ export function createDatabaseRouteHandler(config: AppConfig): ApiRouteHandler |
 
   const nodePool = new Pool({
     connectionString: config.databaseUrl,
-    max: 5,
+    // A serverless invocation normally needs only one connection. Keeping the
+    // pool small avoids exhausting the Neon pooler during concurrent cold
+    // starts, while the longer timeout allows a suspended compute to resume.
+    max: 1,
     idleTimeoutMillis: 10_000,
-    connectionTimeoutMillis: 8_000
+    connectionTimeoutMillis: 25_000
   });
   // Lets Vercel drain pooled connections when Fluid Compute suspends an instance.
   attachDatabasePool(nodePool);
