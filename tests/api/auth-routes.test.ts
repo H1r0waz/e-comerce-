@@ -8,6 +8,7 @@ import type {
   ApiRouteDependencies,
   AuthRouteService,
   AuthenticatedSession,
+  CatalogProductResponse,
   DashboardSnapshotResponse
 } from "../../apps/api/src/routes/types.ts";
 
@@ -38,6 +39,23 @@ function emptyDashboard(): DashboardSnapshotResponse {
     alerts: [],
     orders: [],
     channelSales: { total: "$0", trend: "0%", values: [], distribution: [] }
+  };
+}
+
+function catalogProduct(overrides: Partial<CatalogProductResponse> = {}): CatalogProductResponse {
+  return {
+    id: "product-1",
+    variantId: "variant-1",
+    name: "Sérum hidratante",
+    variantName: "Única",
+    categoryName: "Tratamientos",
+    sku: "SER-001",
+    retailPriceMinor: 2450000,
+    onHandQuantity: 3,
+    reservedQuantity: 0,
+    availableQuantity: 3,
+    lowStockThreshold: 1,
+    ...overrides
   };
 }
 
@@ -181,5 +199,118 @@ test("state-changing auth routes reject an untrusted Origin before authenticatin
     assert.equal(response.status, 403);
     assert.equal((body.error as { code: string }).code, "origin_not_allowed");
     assert.equal(loginAttempts, 0);
+  });
+});
+
+test("catalog and stock routes keep every operation scoped to the authenticated commerce", async () => {
+  const listedOrganizations: string[] = [];
+  const created: Array<Record<string, unknown>> = [];
+  const receipts: Array<Record<string, unknown>> = [];
+  const deps = dependencies({
+    catalogRepository: {
+      async listProducts(organizationId) {
+        listedOrganizations.push(organizationId);
+        return [catalogProduct()];
+      },
+      async createProduct(input) {
+        created.push(input);
+        return catalogProduct({ name: input.name, categoryName: input.categoryName, sku: input.sku ?? "" });
+      },
+      async receiveStock(input) {
+        receipts.push(input);
+        return catalogProduct({ variantId: input.variantId, onHandQuantity: 8, availableQuantity: 8 });
+      }
+    }
+  });
+
+  await withServer(deps, async (origin) => {
+    const headers = { cookie: "commerce_session=valid-session", origin: dashboardOrigin };
+
+    const list = await fetch(`${origin}/v1/catalog/products`, { headers });
+    assert.equal(list.status, 200);
+    assert.deepEqual((await json(list)).data, [catalogProduct()]);
+    assert.deepEqual(listedOrganizations, ["org-1"]);
+
+    const create = await fetch(`${origin}/v1/catalog/products`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Sérum hidratante",
+        categoryName: "Tratamientos",
+        sku: "SER-001",
+        retailPriceMinor: 2450000,
+        lowStockThreshold: 1,
+        initialQuantity: 3,
+        unitCostMinor: 1200000,
+        lotCode: "L-01",
+        expiresAt: "2030-12-31"
+      })
+    });
+    assert.equal(create.status, 201);
+    assert.deepEqual(created, [{
+      organizationId: "org-1",
+      actorUserId: "user-1",
+      name: "Sérum hidratante",
+      categoryName: "Tratamientos",
+      variantName: undefined,
+      sku: "SER-001",
+      retailPriceMinor: 2450000,
+      lowStockThreshold: 1,
+      initialQuantity: 3,
+      unitCostMinor: 1200000,
+      lotCode: "L-01",
+      expiresAt: "2030-12-31"
+    }]);
+
+    const receipt = await fetch(`${origin}/v1/inventory/receipts`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ variantId: "variant-1", quantity: 5, unitCostMinor: 1000000, lotCode: "L-02" })
+    });
+    assert.equal(receipt.status, 201);
+    assert.deepEqual(receipts, [{
+      organizationId: "org-1",
+      actorUserId: "user-1",
+      variantId: "variant-1",
+      quantity: 5,
+      unitCostMinor: 1000000,
+      lotCode: "L-02",
+      expiresAt: undefined
+    }]);
+  });
+});
+
+test("catalog write routes reject a sales-only user", async () => {
+  const deps = dependencies({
+    authRepository: {
+      async findDefaultMembershipForUser() {
+        return { organizationId: "org-1", organizationName: "Comercio Uno", role: "SALES" };
+      },
+      async findMembershipForUser() {
+        return { organizationId: "org-1", organizationName: "Comercio Uno", role: "SALES" };
+      },
+      async revokeSessionByTokenHash() {}
+    },
+    catalogRepository: {
+      async listProducts() { return []; },
+      async createProduct() { throw new Error("must not create product"); },
+      async receiveStock() { throw new Error("must not receive stock"); }
+    }
+  });
+
+  await withServer(deps, async (origin) => {
+    const response = await fetch(`${origin}/v1/catalog/products`, {
+      method: "POST",
+      headers: {
+        cookie: "commerce_session=valid-session",
+        origin: dashboardOrigin,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ name: "Producto", categoryName: "Categoría", retailPriceMinor: 1 })
+    });
+    const body = await json(response);
+
+    assert.equal(response.status, 403);
+    assert.equal((body.error as { code: string }).code, "forbidden");
   });
 });
