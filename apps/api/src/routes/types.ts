@@ -157,6 +157,7 @@ export interface CatalogRouteRepository {
 }
 
 export type OrderChannel = "WHATSAPP" | "INSTAGRAM" | "ONLINE_STORE" | "MARKETPLACE" | "OTHER";
+export type PaymentMethod = "BANK_TRANSFER" | "MERCADO_PAGO" | "CASH_ON_DELIVERY" | "CARD" | "OTHER";
 
 export interface OrderListItemResponse {
   id: string;
@@ -182,6 +183,12 @@ export interface OrdersRouteRepository {
     channel: OrderChannel;
     lines: Array<{ variantId: string; quantity: number }>;
     shippingChargeMinor?: number;
+  }): Promise<OrderListItemResponse>;
+  confirmPayment(input: {
+    organizationId: string;
+    actorUserId: string;
+    orderId: string;
+    method: PaymentMethod;
   }): Promise<OrderListItemResponse>;
 }
 

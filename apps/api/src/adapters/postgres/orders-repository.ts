@@ -1,5 +1,5 @@
 import { withTransaction, type PostgresPool, type PostgresQueryClient } from "./types.js";
-import type { OrderChannel, OrderListItemResponse } from "../../routes/types.js";
+import type { OrderChannel, OrderListItemResponse, PaymentMethod } from "../../routes/types.js";
 
 export interface CreatePendingPaymentOrderInput {
   organizationId: string;
@@ -24,6 +24,8 @@ interface OrderRow extends Record<string, unknown> {
   status: OrderListItemResponse["status"]; total_minor: string | number; reservation_expires_at: Date | string | null;
   line_count: string | number; created_at: Date | string;
 }
+interface PaymentOrderRow extends Record<string, unknown> { id: string; total_minor: string | number; paid_amount_minor: string | number; status: string; reservation_expires_at: Date | string | null }
+interface ReservationRow extends Record<string, unknown> { id: string; product_variant_id: string; inventory_lot_id: string; quantity: string | number; unit_cost_minor: string | number }
 
 /**
  * First production order flow. It locks each inventory level and its FIFO lots
@@ -115,6 +117,74 @@ export class PostgresOrdersRepository {
         [input.organizationId, input.actorUserId, orderId, JSON.stringify({ orderNumber, customerId: customer.id, totalMinor, channel: input.channel })]
       );
       return this.findOrderWithClient(client, input.organizationId, orderId);
+    });
+  }
+
+  async confirmPayment(input: { organizationId: string; actorUserId: string; orderId: string; method: PaymentMethod }): Promise<OrderListItemResponse> {
+    return withTransaction(this.pool, async (client) => {
+      const lockedOrder = await client.query<PaymentOrderRow>(
+        `SELECT id, total_minor, paid_amount_minor, status, reservation_expires_at
+         FROM orders WHERE id = $1 AND organization_id = $2 FOR UPDATE`, [input.orderId, input.organizationId]
+      );
+      const order = lockedOrder.rows[0];
+      if (!order) throw new OrderValidationError("No encontramos ese pedido.");
+      if (order.status !== "PENDING_PAYMENT") throw new OrderValidationError("Este pedido ya no está esperando la confirmación de pago.");
+      if (order.reservation_expires_at && new Date(order.reservation_expires_at).getTime() <= Date.now()) {
+        throw new OrderValidationError("La reserva de este pedido venció. Revisá el stock antes de confirmar el pago.");
+      }
+      const totalMinor = numberValue(order.total_minor);
+      const paidAmountMinor = numberValue(order.paid_amount_minor);
+      const remainingMinor = totalMinor - paidAmountMinor;
+      if (remainingMinor <= 0) throw new OrderValidationError("El pedido ya está pagado.");
+
+      const reservations = await client.query<ReservationRow>(
+        `SELECT sr.id, sr.product_variant_id, sr.inventory_lot_id, sr.quantity, l.unit_cost_minor
+         FROM stock_reservations sr
+         JOIN inventory_lots l ON l.id = sr.inventory_lot_id AND l.organization_id = sr.organization_id
+         WHERE sr.organization_id = $1 AND sr.order_id = $2 AND sr.status = 'ACTIVE'
+         FOR UPDATE OF sr, l`, [input.organizationId, input.orderId]
+      );
+      if (!reservations.rows.length) throw new OrderValidationError("El pedido no tiene una reserva activa para confirmar.");
+
+      for (const reservation of reservations.rows) {
+        const quantity = numberValue(reservation.quantity);
+        const unitCostMinor = numberValue(reservation.unit_cost_minor);
+        await client.query(
+          `UPDATE inventory_lots
+           SET available_quantity = available_quantity - $3, reserved_quantity = reserved_quantity - $3
+           WHERE organization_id = $1 AND id = $2`, [input.organizationId, reservation.inventory_lot_id, quantity]
+        );
+        await client.query(
+          `UPDATE inventory_levels
+           SET on_hand_quantity = on_hand_quantity - $3, reserved_quantity = reserved_quantity - $3
+           WHERE organization_id = $1 AND product_variant_id = $2`, [input.organizationId, reservation.product_variant_id, quantity]
+        );
+        await client.query(`UPDATE stock_reservations SET status = 'CONSUMED' WHERE organization_id = $1 AND id = $2`, [input.organizationId, reservation.id]);
+        await client.query(
+          `INSERT INTO stock_movements (
+            organization_id, product_variant_id, inventory_lot_id, movement_type, quantity_delta, reserved_quantity_delta,
+            unit_cost_minor, reference_type, reference_id, reason, created_by_user_id
+          ) VALUES ($1, $2, $3, 'SALE_COMMITTED', -$4, -$4, $5, 'ORDER', $6, 'Pago confirmado y stock descontado', $7)`,
+          [input.organizationId, reservation.product_variant_id, reservation.inventory_lot_id, quantity, unitCostMinor, input.orderId, input.actorUserId]
+        );
+      }
+      await client.query(
+        `INSERT INTO payments (organization_id, order_id, method, status, amount_minor, paid_at, confirmed_at, confirmed_by_user_id)
+         VALUES ($1, $2, $3, 'CONFIRMED', $4, now(), now(), $5)`,
+        [input.organizationId, input.orderId, input.method, remainingMinor, input.actorUserId]
+      );
+      await client.query(
+        `UPDATE orders
+         SET status = 'CONFIRMED', reservation_status = 'CONSUMED', paid_amount_minor = paid_amount_minor + $3,
+             outstanding_amount_minor = 0
+         WHERE organization_id = $1 AND id = $2`, [input.organizationId, input.orderId, remainingMinor]
+      );
+      await client.query(
+        `INSERT INTO audit_logs (organization_id, actor_user_id, action, entity_type, entity_id, after_value)
+         VALUES ($1, $2, 'payment.confirmed', 'order', $3, $4::jsonb)`,
+        [input.organizationId, input.actorUserId, input.orderId, JSON.stringify({ method: input.method, amountMinor: remainingMinor })]
+      );
+      return this.findOrderWithClient(client, input.organizationId, input.orderId);
     });
   }
 

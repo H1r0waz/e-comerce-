@@ -1,4 +1,4 @@
-import type { AcceptInvitationInput, AuthenticationResult, CatalogProduct, CommerceApi, CommerceSession, CreateOrderInput, CreateProductInput, DashboardSnapshot, OrderListItem, ReceiveStockInput, SignInInput } from "./types";
+import type { AcceptInvitationInput, AuthenticationResult, CatalogProduct, CommerceApi, CommerceSession, CreateOrderInput, CreateProductInput, DashboardSnapshot, OrderListItem, PaymentMethod, ReceiveStockInput, SignInInput } from "./types";
 
 const dashboard: DashboardSnapshot = {
   generatedAt: "2026-10-13T12:00:00.000Z",
@@ -100,6 +100,15 @@ export class MockCommerceApi implements CommerceApi {
     };
     this.orders = [order, ...this.orders];
     return order;
+  }
+
+  async confirmPayment(input: { orderId: string; method: PaymentMethod }): Promise<OrderListItem> {
+    const index = this.orders.findIndex((order) => order.id === input.orderId);
+    const order = this.orders[index];
+    if (!order || order.status !== "PENDING_PAYMENT") throw new Error("No podemos confirmar el pago de este pedido.");
+    const confirmed = { ...order, status: "CONFIRMED" as const };
+    this.orders[index] = confirmed;
+    return confirmed;
   }
 
   private createSession(email: string, displayName: string): CommerceSession {

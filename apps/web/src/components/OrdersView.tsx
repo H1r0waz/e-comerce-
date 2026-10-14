@@ -6,6 +6,7 @@ import type {
   CatalogProduct,
   CreateOrderInput,
   OrderListItem,
+  PaymentMethod,
 } from "../lib/api/types";
 import { useCommerceSession } from "./SessionGate";
 
@@ -26,6 +27,7 @@ export function OrdersView() {
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [filter, setFilter] = useState<Filter>("Todos");
   const [showForm, setShowForm] = useState(false);
+  const [confirmingOrder, setConfirmingOrder] = useState<OrderListItem | null>(null);
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -95,6 +97,23 @@ export function OrdersView() {
     setNotice("");
     setShowForm(true);
     if (!lines.length) addLine();
+  };
+  const confirmPayment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmingOrder) return;
+    const method = value(new FormData(event.currentTarget), "paymentMethod") as PaymentMethod;
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await api.confirmPayment({ orderId: confirmingOrder.id, method });
+      setOrders((current) => current.map((order) => order.id === updated.id ? updated : order));
+      setConfirmingOrder(null);
+      setNotice(`Pago del pedido #${updated.orderNumber} confirmado. Ya está listo para preparar.`);
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "No pudimos confirmar el pago.");
+    } finally {
+      setSaving(false);
+    }
   };
   const updateLine = (index: number, change: Partial<DraftLine>) =>
     setLines((current) =>
@@ -202,6 +221,18 @@ export function OrdersView() {
                 {order.lineCount === 1 ? "producto" : "productos"} ·{" "}
                 {order.customerPhone} · Total {formatMoney(order.totalMinor)}
               </p>
+              {order.status === "PENDING_PAYMENT" && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setError("");
+                    setConfirmingOrder(order);
+                  }}
+                >
+                  Confirmar pago
+                </button>
+              )}
             </div>
             <span className={`status ${tone(order.status)}`}>
               {statusLabel(order.status)}
@@ -365,6 +396,40 @@ export function OrdersView() {
                 No hay productos con stock para vender.
               </p>
             )}
+          </form>
+        </div>
+      )}
+      {confirmingOrder && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-card" onSubmit={confirmPayment}>
+            <button
+              type="button"
+              className="close-button"
+              onClick={() => !saving && setConfirmingOrder(null)}
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
+            <span className="eyebrow">CONFIRMACIÓN MANUAL</span>
+            <h3>Confirmar pago</h3>
+            <p>
+              Registraremos {formatMoney(confirmingOrder.totalMinor)} como cobrado para el pedido #{confirmingOrder.orderNumber}.
+              El stock reservado se descontará y el pedido pasará a preparación.
+            </p>
+            <label>
+              Medio de pago
+              <select name="paymentMethod" defaultValue="MERCADO_PAGO">
+                <option value="MERCADO_PAGO">Mercado Pago</option>
+                <option value="BANK_TRANSFER">Transferencia bancaria</option>
+                <option value="CARD">Tarjeta</option>
+                <option value="CASH_ON_DELIVERY">Efectivo contra entrega</option>
+                <option value="OTHER">Otro</option>
+              </select>
+            </label>
+            {error && <p className="auth-error" role="alert">{error}</p>}
+            <button className="new-order" type="submit" disabled={saving}>
+              {saving ? "Confirmando pago…" : "Confirmar pago"}
+            </button>
           </form>
         </div>
       )}

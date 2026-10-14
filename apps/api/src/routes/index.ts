@@ -12,6 +12,7 @@ import type {
   CommerceSessionResponse,
   OrderChannel,
   OrderListItemResponse,
+  PaymentMethod,
   SessionUserResponse
 } from "./types.js";
 
@@ -186,6 +187,20 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
         return true;
       }
 
+      if (method === "POST" && pathname === "/v1/orders/payment-confirmations") {
+        const session = await requireCommerceSession(request, dependencies);
+        requireOrderWrite(session.user.role);
+        const body = await readJsonObject(request);
+        const order = await requireOrdersRepository(dependencies).confirmPayment({
+          organizationId: session.user.organizationId,
+          actorUserId: session.user.id,
+          orderId: requiredString(body, "orderId", 128),
+          method: requiredPaymentMethod(body)
+        });
+        sendData<OrderListItemResponse>(response, 200, order, requestId);
+        return true;
+      }
+
       if (method === "GET" && pathname === "/v1/dashboard") {
         const session = await requireCommerceSession(request, dependencies, undefined, optionalQueryString(url, "organizationId", 128));
         const data = await dependencies.dashboardRepository.getDashboard({
@@ -277,13 +292,13 @@ function toSessionUser(
 
 function isKnownRoute(method: string, pathname: string): boolean {
   const routes = [
-    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/dashboard",
+    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/orders/payment-confirmations", "/v1/dashboard",
     "/v1/bootstrap/super-admin/complete"
   ];
   return (method === "OPTIONS" && routes.includes(pathname))
     || (method === "GET" && ["/v1/auth/session", "/v1/catalog/products", "/v1/orders", "/v1/dashboard"].includes(pathname))
     || (method === "DELETE" && pathname === "/v1/auth/session")
-    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/bootstrap/super-admin/complete", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders"].includes(pathname));
+    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/bootstrap/super-admin/complete", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/orders/payment-confirmations"].includes(pathname));
 }
 
 function isStateChanging(method: string): boolean {
@@ -387,6 +402,14 @@ function requiredOrderLines(body: Record<string, unknown>): Array<{ variantId: s
     const record = line as Record<string, unknown>;
     return { variantId: requiredString(record, "variantId", 128), quantity: requiredInteger(record, "quantity", 1) };
   });
+}
+
+function requiredPaymentMethod(body: Record<string, unknown>): PaymentMethod {
+  const value = requiredString(body, "method", 32);
+  if (!(["BANK_TRANSFER", "MERCADO_PAGO", "CASH_ON_DELIVERY", "CARD", "OTHER"] as const).includes(value as PaymentMethod)) {
+    throw new HttpRouteError(400, "invalid_request", "La solicitud contiene campos inválidos.");
+  }
+  return value as PaymentMethod;
 }
 
 function optionalQueryString(url: URL, key: string, maximumLength: number): string | undefined {

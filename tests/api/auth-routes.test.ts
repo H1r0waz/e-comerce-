@@ -317,6 +317,7 @@ test("catalog write routes reject a sales-only user", async () => {
 
 test("order routes create pending-payment sales under the authenticated commerce", async () => {
   const created: Array<Record<string, unknown>> = [];
+  const confirmed: Array<Record<string, unknown>> = [];
   const order = {
     id: "order-1", orderNumber: "000001", customerName: "Sofía", customerPhone: "+5491112345678",
     channel: "WHATSAPP" as const, status: "PENDING_PAYMENT" as const, totalMinor: 2450000,
@@ -325,7 +326,11 @@ test("order routes create pending-payment sales under the authenticated commerce
   const deps = dependencies({
     ordersRepository: {
       async listOrders(organizationId) { assert.equal(organizationId, "org-1"); return [order]; },
-      async createPendingPaymentOrder(input) { created.push(input); return order; }
+      async createPendingPaymentOrder(input) { created.push(input); return order; },
+      async confirmPayment(input) {
+        confirmed.push(input);
+        return { ...order, status: "CONFIRMED" as const };
+      }
     }
   });
 
@@ -348,5 +353,15 @@ test("order routes create pending-payment sales under the authenticated commerce
     const listed = await fetch(`${origin}/v1/orders`, { headers: { cookie: "commerce_session=valid-session" } });
     assert.equal(listed.status, 200);
     assert.deepEqual((await json(listed)).data, [order]);
+
+    const payment = await fetch(`${origin}/v1/orders/payment-confirmations`, {
+      method: "POST", headers,
+      body: JSON.stringify({ orderId: "order-1", method: "MERCADO_PAGO" })
+    });
+    assert.equal(payment.status, 200);
+    assert.equal(((await json(payment)).data as { status: string }).status, "CONFIRMED");
+    assert.deepEqual(confirmed, [{
+      organizationId: "org-1", actorUserId: "user-1", orderId: "order-1", method: "MERCADO_PAGO"
+    }]);
   });
 });
