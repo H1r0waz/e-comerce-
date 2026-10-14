@@ -27,7 +27,7 @@ export default function InitialSetupPage() {
     } finally { setSubmitting(false); }
   };
 
-  const completeSetup = async (event: FormEvent<HTMLFormElemeent>) => {
+  const completeSetup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!enrollment) return;
     setError(""); setSubmitting(true);
@@ -45,14 +45,14 @@ export default function InitialSetupPage() {
 
   if (recoveryCodes) return <main className="auth-shell"><section className="auth-card" aria-labelledby="setup-complete-title">
     <div className="auth-brand"><span className="brand-mark">b</span><strong>bruma</strong></div>
-    <div className="auth-copy"><span className="eyebrow">CUENTA ACTIVADA</span><h1 id="setup-complete-title">Guardó tus códigos de recuperación</h1><p>Usé cada código una sola vez si perdés el acceso a tu autenticador. No los compartas.</p></div>
+    <div className="auth-copy"><span className="eyebrow">CUENTA ACTIVADA</span><h1 id="setup-complete-title">Guardá tus códigos de recuperación</h1><p>Usá cada código una sola vez si perdés el acceso a tu autenticador. No los compartas.</p></div>
     <code className="auth-notice" style={{ whiteSpace: "pre-wrap", lineHeight: 1.8 }}>{recoveryCodes.join("\n")}</code>
     <a className="auth-submit" href="/">Ir a iniciar sesión</a>
   </section></main>;
 
   return <main className="auth-shell"><section className="auth-card" aria-labelledby="setup-title">
     <div className="auth-brand"><span className="brand-mark">b</span><strong>bruma</strong></div>
-    <div className="auth-copy"><span className="eyebrow">ACTIVACIÓN INICIAL</span><h1 id="setup-title">Creã tu acceso seguro</h1><p>Este paso sólo funciona una vez. Tus datos y contraseña se envían cifrados y no se guardan en el navegador.</p></div>
+    <div className="auth-copy"><span className="eyebrow">ACTIVACIÓN INICIAL</span><h1 id="setup-title">Creá tu acceso seguro</h1><p>Este paso sólo funciona una vez. Tus datos y contraseña se envían cifrados y no se guardan en el navegador.</p></div>
     {!enrollment ? <form className="auth-form" onSubmit={startEnrollment}>
       <label>Código de activación<input value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" required /></label>
       <button className="auth-submit" disabled={submitting}>{submitting ? "Preparando…" : "Configurar autenticador"}</button>
