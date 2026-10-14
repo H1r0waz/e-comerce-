@@ -156,6 +156,21 @@ export interface CatalogRouteRepository {
   }): Promise<CatalogProductResponse>;
 }
 
+export interface CustomerListItemResponse {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  customerType: "RETAIL" | "WHOLESALE";
+  orderCount: number;
+  totalSpentMinor: number;
+  lastPurchaseAt?: string;
+}
+
+export interface CustomersRouteRepository {
+  listCustomers(organizationId: string): Promise<CustomerListItemResponse[]>;
+}
+
 export type OrderChannel = "WHATSAPP" | "INSTAGRAM" | "ONLINE_STORE" | "MARKETPLACE" | "OTHER";
 export type PaymentMethod = "BANK_TRANSFER" | "MERCADO_PAGO" | "CASH_ON_DELIVERY" | "CARD" | "OTHER";
 export type FulfillmentStatus = "PREPARING" | "READY_TO_SHIP" | "COMPLETED";
@@ -204,6 +219,7 @@ export interface ApiRouteDependencies {
   authRepository: AuthSessionRepository;
   dashboardRepository: DashboardRepository;
   catalogRepository?: CatalogRouteRepository;
+  customersRepository?: CustomersRouteRepository;
   ordersRepository?: OrdersRouteRepository;
   nodeEnv: "development" | "test" | "production";
   corsOrigin: string;

@@ -1118,6 +1118,37 @@ nav {
 .catalog-row em {
   font-style: normal;
 }
+.customers-panel {
+  padding: 0;
+  overflow: hidden;
+}
+.customers-head,
+.customers-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1.45fr 0.75fr 0.9fr 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+}
+.customers-head {
+  color: #aaa3b0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.65px;
+  background: #fcfbfd;
+}
+.customers-row {
+  border-top: 1px solid #f0edf3;
+  font-size: 12px;
+}
+.customers-row > span {
+  display: grid;
+  gap: 4px;
+}
+.customers-row small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
 .empty-state {
   padding: 28px 20px;
   text-align: center;

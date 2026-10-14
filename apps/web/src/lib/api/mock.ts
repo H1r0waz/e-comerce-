@@ -1,4 +1,4 @@
-import type { AcceptInvitationInput, AuthenticationResult, CatalogProduct, CommerceApi, CommerceSession, CreateOrderInput, CreateProductInput, DashboardSnapshot, FulfillmentStatus, OrderListItem, PaymentMethod, ReceiveStockInput, SignInInput } from "./types";
+import type { AcceptInvitationInput, AuthenticationResult, CatalogProduct, CommerceApi, CommerceSession, CreateOrderInput, CreateProductInput, CustomerListItem, DashboardSnapshot, FulfillmentStatus, OrderListItem, PaymentMethod, ReceiveStockInput, SignInInput } from "./types";
 
 const dashboard: DashboardSnapshot = {
   generatedAt: "2026-10-13T12:00:00.000Z",
@@ -88,6 +88,21 @@ export class MockCommerceApi implements CommerceApi {
 
   async listOrders(): Promise<OrderListItem[]> {
     return this.orders;
+  }
+
+  async listCustomers(): Promise<CustomerListItem[]> {
+    const customers = new Map<string, CustomerListItem>();
+    for (const order of this.orders) {
+      const key = order.customerPhone;
+      const current = customers.get(key) ?? { id: key, name: order.customerName, phone: order.customerPhone, customerType: "RETAIL", orderCount: 0, totalSpentMinor: 0 };
+      if (["CONFIRMED", "PREPARING", "READY_TO_SHIP", "COMPLETED"].includes(order.status)) {
+        current.orderCount += 1;
+        current.totalSpentMinor += order.totalMinor;
+        current.lastPurchaseAt = order.createdAt;
+      }
+      customers.set(key, current);
+    }
+    return [...customers.values()];
   }
 
   async createOrder(input: CreateOrderInput): Promise<OrderListItem> {

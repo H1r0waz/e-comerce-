@@ -125,6 +125,17 @@ export interface CreateOrderInput {
   shippingChargeMinor?: number;
 }
 
+export interface CustomerListItem {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  customerType: "RETAIL" | "WHOLESALE";
+  orderCount: number;
+  totalSpentMinor: number;
+  lastPurchaseAt?: string;
+}
+
 export interface SignInInput {
   email: string;
   password: string;
@@ -146,6 +157,7 @@ export interface CommerceApi {
   createProduct(input: CreateProductInput): Promise<CatalogProduct>;
   receiveStock(input: ReceiveStockInput): Promise<CatalogProduct>;
   listOrders(): Promise<OrderListItem[]>;
+  listCustomers(): Promise<CustomerListItem[]>;
   createOrder(input: CreateOrderInput): Promise<OrderListItem>;
   confirmPayment(input: { orderId: string; method: PaymentMethod }): Promise<OrderListItem>;
   transitionFulfillment(input: { orderId: string; status: FulfillmentStatus }): Promise<OrderListItem>;

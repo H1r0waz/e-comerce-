@@ -380,3 +380,21 @@ test("order routes create pending-payment sales under the authenticated commerce
     }]);
   });
 });
+
+test("customers route returns history scoped to the authenticated commerce", async () => {
+  const calls: string[] = [];
+  const deps = dependencies({
+    customersRepository: {
+      async listCustomers(organizationId) {
+        calls.push(organizationId);
+        return [{ id: "customer-1", name: "Sofía", phone: "+5491112345678", customerType: "RETAIL", orderCount: 2, totalSpentMinor: 4900000, lastPurchaseAt: "2030-01-01T12:00:00.000Z" }];
+      }
+    }
+  });
+  await withServer(deps, async (origin) => {
+    const response = await fetch(`${origin}/v1/customers`, { headers: { cookie: "commerce_session=valid-session" } });
+    assert.equal(response.status, 200);
+    assert.equal(((await json(response)).data as Array<{ name: string }>)[0]?.name, "Sofía");
+    assert.deepEqual(calls, ["org-1"]);
+  });
+});

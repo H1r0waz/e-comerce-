@@ -170,6 +170,13 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
         return true;
       }
 
+      if (method === "GET" && pathname === "/v1/customers") {
+        const session = await requireCommerceSession(request, dependencies);
+        const customers = await requireCustomersRepository(dependencies).listCustomers(session.user.organizationId);
+        sendData(response, 200, customers, requestId);
+        return true;
+      }
+
       if (method === "POST" && pathname === "/v1/orders") {
         const session = await requireCommerceSession(request, dependencies);
         requireOrderWrite(session.user.role);
@@ -273,6 +280,11 @@ function requireCatalogRepository(dependencies: ApiRouteDependencies) {
   return dependencies.catalogRepository;
 }
 
+function requireCustomersRepository(dependencies: ApiRouteDependencies) {
+  if (!dependencies.customersRepository) throw new HttpRouteError(503, "service_unavailable", "Los clientes no están disponibles en este momento.");
+  return dependencies.customersRepository;
+}
+
 function requireCatalogWrite(role: CommerceRole): void {
   if (!(["OWNER", "INVENTORY_FULFILLMENT", "SUPER_ADMIN"] as const).includes(role as "OWNER" | "INVENTORY_FULFILLMENT" | "SUPER_ADMIN")) {
     throw new ForbiddenError("This role cannot modify the catalogue.");
@@ -313,11 +325,11 @@ function toSessionUser(
 
 function isKnownRoute(method: string, pathname: string): boolean {
   const routes = [
-    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/orders/payment-confirmations", "/v1/orders/fulfillment-transitions", "/v1/dashboard",
+    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/orders/payment-confirmations", "/v1/orders/fulfillment-transitions", "/v1/customers", "/v1/dashboard",
     "/v1/bootstrap/super-admin/complete"
   ];
   return (method === "OPTIONS" && routes.includes(pathname))
-    || (method === "GET" && ["/v1/auth/session", "/v1/catalog/products", "/v1/orders", "/v1/dashboard"].includes(pathname))
+    || (method === "GET" && ["/v1/auth/session", "/v1/catalog/products", "/v1/orders", "/v1/customers", "/v1/dashboard"].includes(pathname))
     || (method === "DELETE" && pathname === "/v1/auth/session")
     || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/bootstrap/super-admin/complete", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/orders/payment-confirmations", "/v1/orders/fulfillment-transitions"].includes(pathname));
 }

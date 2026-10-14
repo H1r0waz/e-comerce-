@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OrdersView } from "../components/OrdersView";
 import { ProductsView } from "../components/ProductsView";
+import { CustomersView } from "../components/CustomersView";
 import { SessionGate, useCommerceSession } from "../components/SessionGate";
 import type { DashboardAlert, DashboardSnapshot } from "../lib/api/types";
 
@@ -134,7 +135,7 @@ function Dashboard() {
 
         <div className="mobile-nav">{navItems.slice(0, 5).map((item) => <button key={item.label} className={active === item.label ? "active" : ""} onClick={() => setActive(item.label)}><Icon name={item.icon} size={18} /><span>{item.label}</span></button>)}</div>
 
-        {active === "Productos" ? <ProductsView /> : active === "Pedidos" ? <OrdersView /> : <>
+        {active === "Productos" ? <ProductsView /> : active === "Pedidos" ? <OrdersView /> : active === "Clientes" ? <CustomersView /> : <>
         <div className="page-heading"><div><h2>Resumen de hoy</h2><p>Todo lo importante de tu negocio, en un solo lugar.</p></div><button className="date-filter" onClick={() => setRange(range === "7 días" ? "30 días" : "7 días")}>Últimos {range}<Icon name="chevron" size={16} /></button></div>
         {usingMockApi && <p className="integration-notice">Vista de demostración local: no persiste datos y solo se habilita durante el desarrollo.</p>}
         {dashboardError && <p className="dashboard-error" role="status">No pudimos actualizar el resumen. <button type="button" onClick={() => void refreshDashboard()}>Reintentar</button></p>}

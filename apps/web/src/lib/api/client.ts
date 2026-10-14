@@ -5,6 +5,7 @@ import type {
   CatalogProduct,
   CommerceApi,
   CommerceSession,
+  CustomerListItem,
   CreateProductInput,
   CreateOrderInput,
   DashboardSnapshot,
@@ -59,6 +60,10 @@ class HttpCommerceApi implements CommerceApi {
 
   listOrders(): Promise<OrderListItem[]> {
     return this.request("/v1/orders");
+  }
+
+  listCustomers(): Promise<CustomerListItem[]> {
+    return this.request("/v1/customers");
   }
 
   createOrder(input: CreateOrderInput): Promise<OrderListItem> {
@@ -121,6 +126,7 @@ class UnconfiguredCommerceApi implements CommerceApi {
   createProduct(): Promise<CatalogProduct> { return Promise.reject(new ApiConfigurationError(this.message)); }
   receiveStock(): Promise<CatalogProduct> { return Promise.reject(new ApiConfigurationError(this.message)); }
   listOrders(): Promise<OrderListItem[]> { return Promise.reject(new ApiConfigurationError(this.message)); }
+  listCustomers(): Promise<CustomerListItem[]> { return Promise.reject(new ApiConfigurationError(this.message)); }
   createOrder(): Promise<OrderListItem> { return Promise.reject(new ApiConfigurationError(this.message)); }
   confirmPayment(): Promise<OrderListItem> { return Promise.reject(new ApiConfigurationError(this.message)); }
   transitionFulfillment(): Promise<OrderListItem> { return Promise.reject(new ApiConfigurationError(this.message)); }
