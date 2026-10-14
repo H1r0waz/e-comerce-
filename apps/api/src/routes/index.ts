@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { hashOpaqueToken } from "../lib/auth/tokens.js";
-import { AuthenticationError, ForbiddenError, MfaRequiredError } from "../modules/auth/authorization.js";
+import { AuthenticationError, BootstrapUnavailableError, ForbiddenError, MfaRequiredError } from "../modules/auth/authorization.js";
 import type {
   ApiRouteDependencies,
   ApiRouteHandler,
@@ -119,6 +119,32 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
         return true;
       }
 
+      // This ceremony is intentionally separate from normal sign-in. It only
+      // works while no SUPER_ADMIN exists, and requires the one-time token
+      // whose hash lives in deployment configuration.
+      if (method === "POST" && pathname === "/v1/bootstrap/super-admin/start") {
+        const body = await readJsonObject(request);
+        const enrollment = dependencies.auth.beginInitialSuperAdminBootstrap(
+          requiredString(body, "bootstrapToken", 512)
+        );
+        sendData(response, 200, enrollment, requestId);
+        return true;
+      }
+
+      if (method === "POST" && pathname === "/v1/bootstrap/super-admin/complete") {
+        const body = await readJsonObject(request);
+        const completed = await dependencies.auth.completeInitialSuperAdminBootstrap({
+          bootstrapToken: requiredString(body, "bootstrapToken", 512),
+          email: requiredString(body, "email", 254),
+          displayName: requiredString(body, "displayName", 120),
+          password: requiredString(body, "password", 1024),
+          totpSecret: requiredString(body, "totpSecret", 128),
+          totpCode: requiredString(body, "totpCode", 32)
+        });
+        sendData(response, 201, { recoveryCodes: completed.recoveryCodes }, requestId);
+        return true;
+      }
+
       if (method === "GET" && pathname === "/v1/dashboard") {
         const session = await requireCommerceSession(request, dependencies, undefined, optionalQueryString(url, "organizationId", 128));
         const data = await dependencies.dashboardRepository.getDashboard({
@@ -186,10 +212,14 @@ function toSessionUser(
 }
 
 function isKnownRoute(method: string, pathname: string): boolean {
-  return (method === "OPTIONS" && ["/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/auth/mfa/verify", "/v1/dashboard"].includes(pathname))
+  const routes = [
+    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/auth/mfa/verify", "/v1/dashboard",
+    "/v1/bootstrap/super-admin/start", "/v1/bootstrap/super-admin/complete"
+  ];
+  return (method === "OPTIONS" && routes.includes(pathname))
     || (method === "GET" && ["/v1/auth/session", "/v1/dashboard"].includes(pathname))
     || (method === "DELETE" && pathname === "/v1/auth/session")
-    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/auth/mfa/verify"].includes(pathname));
+    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/auth/mfa/verify", "/v1/bootstrap/super-admin/start", "/v1/bootstrap/super-admin/complete"].includes(pathname));
 }
 
 function isStateChanging(method: string): boolean {
@@ -345,6 +375,7 @@ function sendRouteError(response: ServerResponse, error: unknown, requestId: str
 function toRouteError(error: unknown): HttpRouteError {
   if (error instanceof HttpRouteError) return error;
   if (error instanceof MfaRequiredError) return new HttpRouteError(403, "mfa_required", "Necesitás verificar tu segundo factor.");
+  if (error instanceof BootstrapUnavailableError) return new HttpRouteError(404, "not_found", "No encontramos el recurso solicitado.");
   if (error instanceof AuthenticationError) return new HttpRouteError(401, "unauthenticated", "Las credenciales no son válidas.");
   if (error instanceof ForbiddenError) return new HttpRouteError(403, "forbidden", "No tenés permisos para realizar esta acción.");
   return new HttpRouteError(500, "internal_error", "No pudimos completar la solicitud.");

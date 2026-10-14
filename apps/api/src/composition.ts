@@ -30,7 +30,8 @@ export function createDatabaseRouteHandler(config: AppConfig): ApiRouteHandler |
   const authRepository = new PostgresAuthRepository(pool);
   const auth = new AuthService({
     repository: authRepository,
-    mfaSecretProtector: createAesGcmSecretProtector(config.mfaEncryptionKey)
+    mfaSecretProtector: createAesGcmSecretProtector(config.mfaEncryptionKey),
+    superuserBootstrapTokenHash: config.superuserBootstrapTokenHash
   });
 
   return createApiRouteHandler({

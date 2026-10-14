@@ -54,6 +54,15 @@ export interface AuthRouteService {
   }): Promise<{ id: string; email: string }>;
   requireSession(token: string, organizationId?: string): Promise<AuthenticatedSession>;
   verifyMfaForSession(input: { sessionToken: string; code: string; recoveryCode?: boolean }): Promise<void>;
+  beginInitialSuperAdminBootstrap(bootstrapToken: string): { secret: string; otpauthUri: string };
+  completeInitialSuperAdminBootstrap(input: {
+    bootstrapToken: string;
+    email: string;
+    displayName: string;
+    password: string;
+    totpSecret: string;
+    totpCode: string;
+  }): Promise<{ recoveryCodes: string[] }>;
 }
 
 /** Query-only auth projection required to resolve the current commerce. */

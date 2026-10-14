@@ -85,6 +85,14 @@ export interface AuthRepository {
   revokeSession(sessionId: string, at: Date): Promise<void>;
   updateMfa(userId: string, mfa: MfaState): Promise<void>;
   consumeRecoveryCode(userId: string, codeHash: string): Promise<boolean>;
+  /**
+   * Atomically creates the first platform administrator. Implementations must
+   * refuse once a SUPER_ADMIN exists, even if a bootstrap token remains in env.
+   */
+  createInitialSuperAdmin(input: {
+    user: Pick<AuthUser, "id" | "email" | "displayName" | "passwordHash" | "passwordChangedAt" | "mustChangePassword" | "mfa">;
+    createdAt: Date;
+  }): Promise<AuthUser | null>;
 }
 
 export interface AuthClock {

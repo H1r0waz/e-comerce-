@@ -233,6 +233,55 @@ export class PostgresAuthRepository implements AuthRepository {
     return Boolean(result.rows[0]);
   }
 
+  async createInitialSuperAdmin(input: {
+    user: Pick<AuthUser, "id" | "email" | "displayName" | "passwordHash" | "passwordChangedAt" | "mustChangePassword" | "mfa">;
+    createdAt: Date;
+  }): Promise<AuthUser | null> {
+    return withTransaction(this.pool, async (client) => {
+      // Serialize bootstrap attempts even when platform_user_roles is still empty.
+      await client.query("SELECT pg_advisory_xact_lock(741_928_115)");
+      const existingAdmin = await client.query<{ user_id: string }>(
+        "SELECT user_id FROM platform_user_roles WHERE role = 'SUPER_ADMIN' LIMIT 1"
+      );
+      if (existingAdmin.rows[0]) return null;
+
+      const existingUser = await client.query<{ id: string }>(
+        "SELECT id FROM app_users WHERE lower(email) = lower($1) FOR UPDATE",
+        [input.user.email]
+      );
+      if (existingUser.rows[0]) return null;
+
+      await client.query(
+        `INSERT INTO app_users (
+          id, email, display_name, password_hash, password_changed_at, must_change_password, status,
+          two_factor_enabled, two_factor_secret_encrypted, recovery_code_hashes, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', true, $7, $8::jsonb, $9)`,
+        [
+          input.user.id,
+          input.user.email,
+          input.user.displayName,
+          input.user.passwordHash ?? null,
+          input.user.passwordChangedAt ?? null,
+          input.user.mustChangePassword,
+          input.user.mfa.encryptedTotpSecret ? Buffer.from(input.user.mfa.encryptedTotpSecret, "utf8") : null,
+          JSON.stringify(input.user.mfa.recoveryCodeHashes),
+          input.createdAt
+        ]
+      );
+      // The database trigger independently enforces that MFA is present.
+      await client.query(
+        "INSERT INTO platform_user_roles (user_id, role, created_at) VALUES ($1, 'SUPER_ADMIN', $2)",
+        [input.user.id, input.createdAt]
+      );
+      await client.query(
+        `INSERT INTO audit_logs (organization_id, actor_user_id, action, entity_type, entity_id, after_value, reason, occurred_at)
+         VALUES (NULL, $1, 'platform.super_admin_bootstrapped', 'app_user', $1, jsonb_build_object('email', $2), 'initial secure bootstrap', $3)`,
+        [input.user.id, input.user.email, input.createdAt]
+      );
+      return this.findUserByIdWithClient(client, input.user.id);
+    });
+  }
+
   private async findUserByIdWithClient(client: PostgresQueryClient, userId: string): Promise<AuthUser | null> {
     const result = await client.query<UserRow>(`${USER_SELECT} WHERE u.id = $1 GROUP BY u.id`, [userId]);
     return result.rows[0] ? mapUser(result.rows[0]) : null;

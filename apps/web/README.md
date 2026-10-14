@@ -26,6 +26,19 @@ La interfaz debe usar `NEXT_PUBLIC_API_URL=/api/backend`. Así las solicitudes d
 
 El proxy solo reenvía rutas `/v1/*` y los métodos `GET`, `POST`, `DELETE` y `OPTIONS`. Conserva `Cookie`, `Content-Type` y `Set-Cookie`, sin reenviar `Host` ni `Origin` al backend.
 
+## Despliegue en Vercel
+
+Importá el repositorio en un proyecto distinto del API y elegí **Root Directory**: `apps/web`. Vercel detecta Next.js, instala dependencias y ejecuta `npm run build`; no hay que configurar un directorio de salida. El proyecto declara Node.js 22 en `package.json`.
+
+En los entornos Preview y Production configurá:
+
+```dotenv
+NEXT_PUBLIC_API_URL=/api/backend
+COMMERCIAR_API_URL=https://<origen-https-de-la-api>
+```
+
+`COMMERCIAR_API_URL` debe ser únicamente el origen HTTPS de la API: sin ruta, credenciales, parámetros ni secreto. Publicá primero la API, comprobá su `/health` y recién entonces publicá el panel. No cambies `NEXT_PUBLIC_API_URL`: mantiene la sesión en el mismo origen del panel.
+
 ## Comprobar una compilación de producción
 
 ```bash

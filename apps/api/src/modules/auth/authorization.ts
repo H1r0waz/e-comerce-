@@ -3,6 +3,8 @@ import type { AuthUser, OrganizationMembership, OrganizationRole } from "./types
 export class AuthenticationError extends Error {}
 export class ForbiddenError extends Error {}
 export class MfaRequiredError extends AuthenticationError {}
+/** Deliberately indistinguishable from a missing route at the HTTP boundary. */
+export class BootstrapUnavailableError extends Error {}
 
 export function requireActiveUser(user: AuthUser | null): asserts user is AuthUser {
   if (!user || user.status !== "ACTIVE") throw new AuthenticationError("Authentication failed.");

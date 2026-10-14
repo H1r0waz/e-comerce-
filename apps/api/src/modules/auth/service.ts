@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { hashPassword, verifyPassword } from "../../lib/auth/passwords.js";
-import { hashOpaqueToken, createOpaqueToken } from "../../lib/auth/tokens.js";
+import { hashOpaqueToken, createOpaqueToken, hashesEqual } from "../../lib/auth/tokens.js";
 import { createRecoveryCodes, createTotpSecret, type MfaSecretProtector, verifyTotpCode } from "../../lib/auth/totp.js";
-import { AuthenticationError, MfaRequiredError, requireActiveUser, requireTenantMembership, requiresMfa } from "./authorization.js";
+import { AuthenticationError, BootstrapUnavailableError, MfaRequiredError, requireActiveUser, requireTenantMembership, requiresMfa } from "./authorization.js";
 import type { AuthClock, AuthRepository, AuthUser, MfaState, OrganizationMembership, OrganizationRole, SessionRecord } from "./types.js";
 import { systemClock } from "./types.js";
 
@@ -15,6 +15,8 @@ export interface AuthServiceOptions {
   clock?: AuthClock;
   invitationTtlMs?: number;
   sessionTtlMs?: number;
+  /** Hash only. The raw bootstrap token must never be persisted or logged. */
+  superuserBootstrapTokenHash?: string;
 }
 
 export interface SessionContext {
@@ -173,6 +175,61 @@ export class AuthService {
     };
     await this.options.repository.updateMfa(userId, mfa);
     return { recoveryCodes: recovery.codes };
+  }
+
+  /**
+   * Starts the one-time initial superuser ceremony. The caller keeps the
+   * temporary secret only long enough to scan it and submit its TOTP code.
+   */
+  beginInitialSuperAdminBootstrap(bootstrapToken: string): { secret: string; otpauthUri: string } {
+    this.requireBootstrapToken(bootstrapToken);
+    return this.beginMfaEnrollment();
+  }
+
+  /**
+   * Creates the first SUPER_ADMIN with MFA already enrolled. The repository
+   * performs the final one-time check transactionally, so leaving the token
+   * hash configured cannot create a second platform administrator.
+   */
+  async completeInitialSuperAdminBootstrap(input: {
+    bootstrapToken: string;
+    email: string;
+    displayName: string;
+    password: string;
+    totpSecret: string;
+    totpCode: string;
+  }): Promise<{ user: AuthUser; recoveryCodes: string[] }> {
+    this.requireBootstrapToken(input.bootstrapToken);
+    if (!verifyTotpCode(input.totpSecret, input.totpCode)) throw new AuthenticationError("Authentication failed.");
+
+    const now = this.clock.now();
+    const recovery = createRecoveryCodes();
+    const displayName = input.displayName.trim();
+    if (!displayName || displayName.length > 120) throw new AuthenticationError("Authentication failed.");
+    const user: Pick<AuthUser, "id" | "email" | "displayName" | "passwordHash" | "passwordChangedAt" | "mustChangePassword" | "mfa"> = {
+      id: randomUUID(),
+      email: normalizeEmail(input.email),
+      displayName,
+      passwordHash: await hashPassword(input.password),
+      passwordChangedAt: now,
+      mustChangePassword: false,
+      mfa: {
+        enabled: true,
+        required: true,
+        encryptedTotpSecret: this.options.mfaSecretProtector.seal(input.totpSecret),
+        recoveryCodeHashes: recovery.hashes
+      }
+    };
+    const created = await this.options.repository.createInitialSuperAdmin({ user, createdAt: now });
+    if (!created) throw new BootstrapUnavailableError("Initial bootstrap is unavailable.");
+    return { user: created, recoveryCodes: recovery.codes };
+  }
+
+  private requireBootstrapToken(token: string): void {
+    const configuredHash = this.options.superuserBootstrapTokenHash;
+    if (!configuredHash || !token || !hashesEqual(hashOpaqueToken(token), configuredHash)) {
+      throw new BootstrapUnavailableError("Initial bootstrap is unavailable.");
+    }
   }
 }
 

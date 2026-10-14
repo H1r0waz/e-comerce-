@@ -80,9 +80,20 @@ cd ../.. && ./apps/api/node_modules/.bin/tsx --test tests/api/tenant-boundary.te
 El API está preparado como Vercel Function y el panel como proyecto Next.js. Antes de producción:
 
 - aplicar las migraciones en la rama objetivo de Neon;
+- crear dos proyectos Vercel que importen este repositorio, uno con **Root Directory** `apps/api` y otro con **Root Directory** `apps/web`;
+- dejar los comandos de instalación y compilación por defecto de cada proyecto (`npm install` y `npm run build`), sin directorio de salida personalizado;
 - cargar las variables de entorno en Vercel;
-- configurar `COMMERCIAR_API_URL` en el panel;
+- publicar primero el API, comprobar `GET /health` y configurar después `COMMERCIAR_API_URL` en el panel;
 - crear el superusuario inicial con MFA;
 - verificar login, MFA, cierre de sesión y aislamiento entre comercios.
+
+### Variables por proyecto
+
+| Proyecto | Variables de producción |
+| --- | --- |
+| API (`apps/api`) | `NODE_ENV=production`, `DATABASE_URL` agrupada de Neon, `SESSION_SECRET`, `MFA_ENCRYPTION_KEY`, `CORS_ORIGIN=https://<panel>` |
+| Panel (`apps/web`) | `NEXT_PUBLIC_API_URL=/api/backend`, `COMMERCIAR_API_URL=https://<api>` |
+
+Los secretos se cargan únicamente en Vercel/Neon. Para las vistas previas, usá una base y secretos aislados o mantenelas deshabilitadas hasta contar con ese entorno; nunca reutilices ni expongas valores de producción.
 
 Consultá `docs/architecture.md`, `docs/security/implementation-plan.md` y `docs/quality/` para más detalle.

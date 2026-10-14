@@ -8,6 +8,8 @@ export interface AppConfig {
   databaseUrl?: string;
   /** 32-byte AES key used only to encrypt stored TOTP secrets. */
   mfaEncryptionKey?: Buffer;
+  /** SHA-256/base64url hash of the one-time initial-superuser bootstrap token. */
+  superuserBootstrapTokenHash?: string;
   corsOrigin: string;
 }
 
@@ -28,6 +30,18 @@ function decodeMfaKey(value: string | undefined, required: boolean): Buffer | un
   const key = Buffer.from(value, "base64url");
   if (key.length !== 32) throw new Error("MFA_ENCRYPTION_KEY must be a base64url-encoded 32-byte key.");
   return key;
+}
+
+function validateBootstrapTokenHash(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (!/^[A-Za-z0-9_-]{43}$/.test(value)) {
+    throw new Error("SUPERUSER_BOOTSTRAP_TOKEN_HASH must be a SHA-256 base64url hash.");
+  }
+  const decoded = Buffer.from(value, "base64url");
+  if (decoded.length !== 32 || decoded.toString("base64url") !== value) {
+    throw new Error("SUPERUSER_BOOTSTRAP_TOKEN_HASH must be a SHA-256 base64url hash.");
+  }
+  return value;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -53,6 +67,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     sessionSecret: sessionSecret ?? "development-only-secret-change-before-production",
     databaseUrl,
     mfaEncryptionKey: decodeMfaKey(env.MFA_ENCRYPTION_KEY, candidate === "production"),
+    superuserBootstrapTokenHash: validateBootstrapTokenHash(env.SUPERUSER_BOOTSTRAP_TOKEN_HASH),
     corsOrigin: env.CORS_ORIGIN ?? "http://localhost:3000"
   };
 }

@@ -4,6 +4,20 @@ TypeScript API for the multi-tenant sales and inventory platform. It exposes aut
 
 For Vercel, deploy this directory as a separate API project. `api/index.ts` is a Node.js Function entry point; `vercel.json` rewrites `/v1/*` and `/health` to it. The web project should access it through its same-origin `/api/backend` proxy so session cookies never become third-party cookies.
 
+## Despliegue en Vercel
+
+Importá el mismo repositorio de GitHub en un proyecto separado, con **Root Directory** en `apps/api`. Dejá que Vercel detecte Node.js y use los comandos por defecto (`npm install` y `npm run build`); no hace falta indicar un directorio de salida. El proyecto declara Node.js 22 mediante `package.json` y la compilación valida tanto el servicio como la Function `api/index.ts`.
+
+Configurá estas variables en el proyecto de API, sin guardarlas en Git:
+
+- `NODE_ENV=production`
+- `DATABASE_URL`: URL agrupada (pooled) de la rama de producción de Neon.
+- `SESSION_SECRET`: valor aleatorio de al menos 32 caracteres.
+- `MFA_ENCRYPTION_KEY`: clave base64url de exactamente 32 bytes.
+- `CORS_ORIGIN`: origen HTTPS exacto del panel web, sin una ruta final.
+
+Aplicá las migraciones de Neon antes de publicar la API. Luego verificá `GET https://<tu-api>/health`; debe responder `status: "ok"`. El panel se configura después con ese origen en `COMMERCIAR_API_URL`.
+
 ## Run locally
 
 From this directory:
@@ -19,10 +33,12 @@ The service listens on `http://127.0.0.1:3001` by default. Use `cp .env.example 
 
 ```bash
 curl http://127.0.0.1:3001/health
-curl -H 'x-organization-id: demo-org' -H 'x-user-id: owner-1' http://127.0.0.1:3001/v1/modules
+curl -X POST http://127.0.0.1:3001/v1/auth/login \
+  -H 'content-type: application/json' \
+  --data '{"email":"dueno@ejemplo.com","password":"una-clave-segura"}'
 ```
 
-`/health` is public. Tenant routes currently use validated request headers as a development placeholder; after authentication is added, those identifiers must come only from a verified session/JWT claim, never from the request body or arbitrary headers.
+`/health` es público. Las rutas autenticadas usan una cookie `HttpOnly` de sesión: la organización y los permisos se obtienen de la sesión, no de encabezados ni datos que aporte el navegador. La autenticación requiere las variables de entorno y las migraciones aplicadas; en un entorno nuevo todavía hay que aprovisionar el superusuario inicial.
 
 ## Security baseline
 
