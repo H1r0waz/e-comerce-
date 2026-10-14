@@ -15,10 +15,12 @@ export function requireTenantMembership(
   allowedRoles?: readonly OrganizationRole[]
 ): asserts membership is OrganizationMembership {
   if (!membership?.active) throw new ForbiddenError("No active membership for this organization.");
-  if (allowedRoles && !allowedRoles.includes(membership.role)) throw new ForbiddenError("Insufficient role for this action.");
+  if (allowedRoles && !allowedRoles.includes(membership.role)) throw new ForbiddenError("Insufficient role for this operation.");
 }
 
 export function requiresMfa(user: AuthUser): boolean {
-  return user.platformRoles.includes("SUPER_ADMIN") || user.mfa.required || user.mfa.enabled;
+  // El segundo factor es una preferencia de la cuenta, no una condición
+  // implícita del rol. Así el primer superusuario puede acceder con correo y
+  // contraseña cuando la instalación no ofrece MFA.
+  return user.mfa.required || user.mfa.enabled;
 }
-
