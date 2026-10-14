@@ -317,7 +317,7 @@ export class PostgresAuthSessionRepository implements AuthSessionRepository {
   async findDefaultMembershipForUser(userId: string): Promise<MembershipProjection | null> {
     const result = await this.pool.query<MembershipProjectionRow>(
       `${MEMBERSHIP_PROJECTION}
-       WHERE m.user_id = $1
+       AND m.user_id = $1
        ORDER BY CASE m.role WHEN 'OWNER' THEN 0 WHEN 'SALES' THEN 1 WHEN 'INVENTORY_FULFILLMENT' THEN 2 ELSE 3 END, m.created_at ASC
        LIMIT 1`,
       [userId]
@@ -328,7 +328,7 @@ export class PostgresAuthSessionRepository implements AuthSessionRepository {
   async findMembershipForUser(input: { userId: string; organizationId: string }): Promise<MembershipProjection | null> {
     const result = await this.pool.query<MembershipProjectionRow>(
       `${MEMBERSHIP_PROJECTION}
-       WHERE m.user_id = $1 AND m.organization_id = $2
+       AND m.user_id = $1 AND m.organization_id = $2
        LIMIT 1`,
       [input.userId, input.organizationId]
     );
