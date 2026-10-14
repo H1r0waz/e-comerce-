@@ -288,7 +288,7 @@ export class PostgresAuthRepository implements AuthRepository {
       );
       await client.query(
         `INSERT INTO audit_logs (organization_id, actor_user_id, action, entity_type, entity_id, after_value, reason, occurred_at)
-         VALUES (NULL, $1, 'platform.super_admin_bootstrapped', 'app_user', $1, jsonb_build_object('email', $2), 'initial secure bootstrap', $3)`,
+         VALUES (NULL, $1, 'platform.super_admin_bootstrapped', 'app_user', $1, jsonb_build_object('email', $2::text), 'initial secure bootstrap', $3)`,
         [input.user.id, input.user.email, input.createdAt]
       );
       return this.findUserByIdWithClient(client, input.user.id);
