@@ -145,6 +145,7 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
 
       return false;
     } catch (error) {
+      logUnexpectedRouteError(error, requestId, pathname);
       sendRouteError(response, error, requestId);
       return true;
     }
@@ -357,6 +358,18 @@ function sendRouteError(response: ServerResponse, error: unknown, requestId: str
     "cache-control": "no-store"
   });
   response.end(JSON.stringify({ error: { code: routeError.code, message: routeError.message }, requestId }));
+}
+
+/** Log only route metadata and a redacted error summary; request bodies hold credentials. */
+function logUnexpectedRouteError(error: unknown, requestId: string, pathname: string): void {
+  const routeError = toRouteError(error);
+  if (routeError.status < 500) return;
+  const source = error instanceof Error ? error : undefined;
+  const driverCode = source && "code" in source && typeof source.code === "string" ? source.code : undefined;
+  const message = source?.message
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, "[redacted-database-url]")
+    .slice(0, 500);
+  console.error(JSON.stringify({ event: "api_route_failure", requestId, pathname, errorName: source?.name, driverCode, message }));
 }
 
 function toRouteError(error: unknown): HttpRouteError {
