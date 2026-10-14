@@ -119,18 +119,6 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
         return true;
       }
 
-      // This ceremony is intentionally separate from normal sign-in. It only
-      // works while no SUPER_ADMIN exists, and requires the one-time token
-      // whose hash lives in deployment configuration.
-      if (method === "POST" && pathname === "/v1/bootstrap/super-admin/start") {
-        const body = await readJsonObject(request);
-        const enrollment = dependencies.auth.beginInitialSuperAdminBootstrap(
-          requiredString(body, "bootstrapToken", 512)
-        );
-        sendData(response, 200, enrollment, requestId);
-        return true;
-      }
-
       if (method === "POST" && pathname === "/v1/bootstrap/super-admin/complete") {
         const body = await readJsonObject(request);
         const completed = await dependencies.auth.completeInitialSuperAdminBootstrap({
@@ -138,11 +126,9 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
           email: requiredString(body, "email", 254),
           displayName: requiredString(body, "displayName", 120),
           organizationName: requiredString(body, "organizationName", 120),
-          password: requiredString(body, "password", 1024),
-          totpSecret: requiredString(body, "totpSecret", 128),
-          totpCode: requiredString(body, "totpCode", 32)
+          password: requiredString(body, "password", 1024)
         });
-        sendData(response, 201, { recoveryCodes: completed.recoveryCodes }, requestId);
+        sendData(response, 201, null, requestId);
         return true;
       }
 
@@ -215,12 +201,12 @@ function toSessionUser(
 function isKnownRoute(method: string, pathname: string): boolean {
   const routes = [
     "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/auth/mfa/verify", "/v1/dashboard",
-    "/v1/bootstrap/super-admin/start", "/v1/bootstrap/super-admin/complete"
+    "/v1/bootstrap/super-admin/complete"
   ];
   return (method === "OPTIONS" && routes.includes(pathname))
     || (method === "GET" && ["/v1/auth/session", "/v1/dashboard"].includes(pathname))
     || (method === "DELETE" && pathname === "/v1/auth/session")
-    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/auth/mfa/verify", "/v1/bootstrap/super-admin/start", "/v1/bootstrap/super-admin/complete"].includes(pathname));
+    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/auth/mfa/verify", "/v1/bootstrap/super-admin/complete"].includes(pathname));
 }
 
 function isStateChanging(method: string): boolean {
