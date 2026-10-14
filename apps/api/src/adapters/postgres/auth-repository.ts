@@ -256,7 +256,7 @@ export class PostgresAuthRepository implements AuthRepository {
         `INSERT INTO app_users (
           id, email, display_name, password_hash, password_changed_at, must_change_password, status,
           two_factor_enabled, two_factor_secret_encrypted, recovery_code_hashes, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', true, $7, $8::jsonb, $9)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', $7, $8, $9::jsonb, $10)`,
         [
           input.user.id,
           input.user.email,
@@ -264,6 +264,7 @@ export class PostgresAuthRepository implements AuthRepository {
           input.user.passwordHash ?? null,
           input.user.passwordChangedAt ?? null,
           input.user.mustChangePassword,
+          input.user.mfa.enabled,
           input.user.mfa.encryptedTotpSecret ? Buffer.from(input.user.mfa.encryptedTotpSecret, "utf8") : null,
           JSON.stringify(input.user.mfa.recoveryCodeHashes),
           input.createdAt
