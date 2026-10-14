@@ -334,7 +334,7 @@ function hashUserAgent(request: IncomingMessage): string | undefined {
 }
 
 function requestIpPrefix(request: IncomingMessage): string | undefined {
-  const address = request.socket.remoteAddress;
+  const address = request.socket?.remoteAddress;
   if (!address) return undefined;
   const ipv4 = address.match(/^(?:.*:)?(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/);
   if (ipv4) return ipv4[1];
