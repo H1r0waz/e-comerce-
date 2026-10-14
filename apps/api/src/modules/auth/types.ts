@@ -91,6 +91,7 @@ export interface AuthRepository {
    */
   createInitialSuperAdmin(input: {
     user: Pick<AuthUser, "id" | "email" | "displayName" | "passwordHash" | "passwordChangedAt" | "mustChangePassword" | "mfa">;
+    organizationName: string;
     createdAt: Date;
   }): Promise<AuthUser | null>;
 }

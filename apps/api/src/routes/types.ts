@@ -59,6 +59,7 @@ export interface AuthRouteService {
     bootstrapToken: string;
     email: string;
     displayName: string;
+    organizationName: string;
     password: string;
     totpSecret: string;
     totpCode: string;

@@ -195,6 +195,7 @@ export class AuthService {
     bootstrapToken: string;
     email: string;
     displayName: string;
+    organizationName: string;
     password: string;
     totpSecret: string;
     totpCode: string;
@@ -205,7 +206,10 @@ export class AuthService {
     const now = this.clock.now();
     const recovery = createRecoveryCodes();
     const displayName = input.displayName.trim();
-    if (!displayName || displayName.length > 120) throw new AuthenticationError("Authentication failed.");
+    const organizationName = input.organizationName.trim();
+    if (!displayName || displayName.length > 120 || !organizationName || organizationName.length > 120) {
+      throw new AuthenticationError("Authentication failed.");
+    }
     const user: Pick<AuthUser, "id" | "email" | "displayName" | "passwordHash" | "passwordChangedAt" | "mustChangePassword" | "mfa"> = {
       id: randomUUID(),
       email: normalizeEmail(input.email),
@@ -220,7 +224,7 @@ export class AuthService {
         recoveryCodeHashes: recovery.hashes
       }
     };
-    const created = await this.options.repository.createInitialSuperAdmin({ user, createdAt: now });
+    const created = await this.options.repository.createInitialSuperAdmin({ user, organizationName, createdAt: now });
     if (!created) throw new BootstrapUnavailableError("Initial bootstrap is unavailable.");
     return { user: created, recoveryCodes: recovery.codes };
   }

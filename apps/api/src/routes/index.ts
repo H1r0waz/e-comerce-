@@ -137,6 +137,7 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
           bootstrapToken: requiredString(body, "bootstrapToken", 512),
           email: requiredString(body, "email", 254),
           displayName: requiredString(body, "displayName", 120),
+          organizationName: requiredString(body, "organizationName", 120),
           password: requiredString(body, "password", 1024),
           totpSecret: requiredString(body, "totpSecret", 128),
           totpCode: requiredString(body, "totpCode", 32)

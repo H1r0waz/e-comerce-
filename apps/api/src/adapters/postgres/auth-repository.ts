@@ -235,6 +235,7 @@ export class PostgresAuthRepository implements AuthRepository {
 
   async createInitialSuperAdmin(input: {
     user: Pick<AuthUser, "id" | "email" | "displayName" | "passwordHash" | "passwordChangedAt" | "mustChangePassword" | "mfa">;
+    organizationName: string;
     createdAt: Date;
   }): Promise<AuthUser | null> {
     return withTransaction(this.pool, async (client) => {
@@ -272,6 +273,17 @@ export class PostgresAuthRepository implements AuthRepository {
       await client.query(
         "INSERT INTO platform_user_roles (user_id, role, created_at) VALUES ($1, 'SUPER_ADMIN', $2)",
         [input.user.id, input.createdAt]
+      );
+      const organization = await client.query<{ id: string }>(
+        `INSERT INTO organizations (name, contact_email, created_at, updated_at)
+         VALUES ($1, $2, $3, $3)
+         RETURNING id`,
+        [input.organizationName, input.user.email, input.createdAt]
+      );
+      await client.query(
+        `INSERT INTO organization_memberships (organization_id, user_id, role, active, created_at, updated_at)
+         VALUES ($1, $2, 'OWNER', true, $3, $3)`,
+        [organization.rows[0].id, input.user.id, input.createdAt]
       );
       await client.query(
         `INSERT INTO audit_logs (organization_id, actor_user_id, action, entity_type, entity_id, after_value, reason, occurred_at)
