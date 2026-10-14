@@ -64,6 +64,41 @@ export interface DashboardSnapshot {
   };
 }
 
+export interface CatalogProduct {
+  id: string;
+  variantId: string;
+  name: string;
+  variantName: string;
+  categoryName: string;
+  sku: string;
+  retailPriceMinor: number;
+  onHandQuantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  lowStockThreshold?: number;
+}
+
+export interface CreateProductInput {
+  name: string;
+  categoryName: string;
+  variantName?: string;
+  sku?: string;
+  retailPriceMinor: number;
+  lowStockThreshold?: number;
+  initialQuantity?: number;
+  unitCostMinor?: number;
+  lotCode?: string;
+  expiresAt?: string;
+}
+
+export interface ReceiveStockInput {
+  variantId: string;
+  quantity: number;
+  unitCostMinor: number;
+  lotCode?: string;
+  expiresAt?: string;
+}
+
 export interface SignInInput {
   email: string;
   password: string;
@@ -81,4 +116,7 @@ export interface CommerceApi {
   acceptInvitation(input: AcceptInvitationInput): Promise<AuthenticationResult>;
   signOut(): Promise<void>;
   getDashboard(): Promise<DashboardSnapshot>;
+  listProducts(): Promise<CatalogProduct[]>;
+  createProduct(input: CreateProductInput): Promise<CatalogProduct>;
+  receiveStock(input: ReceiveStockInput): Promise<CatalogProduct>;
 }

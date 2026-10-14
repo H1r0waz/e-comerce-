@@ -2,9 +2,12 @@ import { MockCommerceApi } from "./mock";
 import type {
   AcceptInvitationInput,
   AuthenticationResult,
+  CatalogProduct,
   CommerceApi,
   CommerceSession,
+  CreateProductInput,
   DashboardSnapshot,
+  ReceiveStockInput,
   SignInInput,
 } from "./types";
 
@@ -36,6 +39,18 @@ class HttpCommerceApi implements CommerceApi {
 
   getDashboard(): Promise<DashboardSnapshot> {
     return this.request("/v1/dashboard");
+  }
+
+  listProducts(): Promise<CatalogProduct[]> {
+    return this.request("/v1/catalog/products");
+  }
+
+  createProduct(input: CreateProductInput): Promise<CatalogProduct> {
+    return this.request("/v1/catalog/products", { method: "POST", body: input });
+  }
+
+  receiveStock(input: ReceiveStockInput): Promise<CatalogProduct> {
+    return this.request("/v1/inventory/receipts", { method: "POST", body: input });
   }
 
   private async request<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
@@ -82,6 +97,9 @@ class UnconfiguredCommerceApi implements CommerceApi {
   acceptInvitation(): Promise<AuthenticationResult> { return Promise.reject(new ApiConfigurationError(this.message)); }
   signOut(): Promise<void> { return Promise.resolve(); }
   getDashboard(): Promise<DashboardSnapshot> { return Promise.reject(new ApiConfigurationError(this.message)); }
+  listProducts(): Promise<CatalogProduct[]> { return Promise.reject(new ApiConfigurationError(this.message)); }
+  createProduct(): Promise<CatalogProduct> { return Promise.reject(new ApiConfigurationError(this.message)); }
+  receiveStock(): Promise<CatalogProduct> { return Promise.reject(new ApiConfigurationError(this.message)); }
 }
 
 type ApiEnvelope<T> = { data?: T; error?: { code?: unknown } };

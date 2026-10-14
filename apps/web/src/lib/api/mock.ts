@@ -1,4 +1,4 @@
-import type { AcceptInvitationInput, AuthenticationResult, CommerceApi, CommerceSession, DashboardSnapshot, SignInInput } from "./types";
+import type { AcceptInvitationInput, AuthenticationResult, CatalogProduct, CommerceApi, CommerceSession, CreateProductInput, DashboardSnapshot, ReceiveStockInput, SignInInput } from "./types";
 
 const dashboard: DashboardSnapshot = {
   generatedAt: "2026-10-13T12:00:00.000Z",
@@ -34,6 +34,7 @@ const dashboard: DashboardSnapshot = {
  */
 export class MockCommerceApi implements CommerceApi {
   private session: CommerceSession | null = null;
+  private products: CatalogProduct[] = [];
 
   async getSession(): Promise<CommerceSession | null> {
     return this.session;
@@ -59,6 +60,29 @@ export class MockCommerceApi implements CommerceApi {
 
   async getDashboard(): Promise<DashboardSnapshot> {
     return dashboard;
+  }
+
+  async listProducts(): Promise<CatalogProduct[]> {
+    return this.products;
+  }
+
+  async createProduct(input: CreateProductInput): Promise<CatalogProduct> {
+    const product: CatalogProduct = {
+      id: `demo-${Date.now()}`, variantId: `demo-variant-${Date.now()}`, name: input.name,
+      variantName: input.variantName || "Única", categoryName: input.categoryName, sku: input.sku || "SIN-SKU",
+      retailPriceMinor: input.retailPriceMinor, onHandQuantity: input.initialQuantity || 0,
+      reservedQuantity: 0, availableQuantity: input.initialQuantity || 0, lowStockThreshold: input.lowStockThreshold
+    };
+    this.products = [product, ...this.products];
+    return product;
+  }
+
+  async receiveStock(input: ReceiveStockInput): Promise<CatalogProduct> {
+    const product = this.products.find((item) => item.variantId === input.variantId);
+    if (!product) throw new Error("No encontramos el producto.");
+    product.onHandQuantity += input.quantity;
+    product.availableQuantity += input.quantity;
+    return product;
   }
 
   private createSession(email: string, displayName: string): CommerceSession {

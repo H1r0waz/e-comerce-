@@ -1,7 +1,7 @@
 import { attachDatabasePool } from "@vercel/functions";
 import { Pool } from "pg";
 import type { AppConfig } from "./config/env.js";
-import { PostgresAuthRepository, PostgresAuthSessionRepository, PostgresDashboardRepository, type PostgresPool } from "./adapters/postgres/index.js";
+import { PostgresAuthRepository, PostgresAuthSessionRepository, PostgresCatalogRepository, PostgresDashboardRepository, type PostgresPool } from "./adapters/postgres/index.js";
 import { createAesGcmSecretProtector } from "./lib/auth/totp.js";
 import { AuthService } from "./modules/auth/service.js";
 import { createApiRouteHandler, type ApiRouteHandler } from "./routes/index.js";
@@ -41,6 +41,7 @@ export function createDatabaseRouteHandler(config: AppConfig): ApiRouteHandler |
     auth,
     authRepository: new PostgresAuthSessionRepository(pool),
     dashboardRepository: new PostgresDashboardRepository(pool),
+    catalogRepository: new PostgresCatalogRepository(pool),
     nodeEnv: config.nodeEnv,
     corsOrigin: config.corsOrigin
   });

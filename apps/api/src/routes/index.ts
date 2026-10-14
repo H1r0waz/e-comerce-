@@ -6,6 +6,7 @@ import type {
   ApiRouteDependencies,
   ApiRouteHandler,
   AuthenticatedSession,
+  CatalogProductResponse,
   CommerceRole,
   CommerceSessionResponse,
   SessionUserResponse
@@ -110,6 +111,53 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
         return true;
       }
 
+      if (method === "GET" && pathname === "/v1/catalog/products") {
+        const session = await requireCommerceSession(request, dependencies);
+        const products = await requireCatalogRepository(dependencies).listProducts(session.user.organizationId);
+        sendData(response, 200, products, requestId);
+        return true;
+      }
+
+      if (method === "POST" && pathname === "/v1/catalog/products") {
+        const session = await requireCommerceSession(request, dependencies);
+        requireCatalogWrite(session.user.role);
+        const body = await readJsonObject(request);
+        const initialQuantity = optionalInteger(body, "initialQuantity", 0);
+        const product = await requireCatalogRepository(dependencies).createProduct({
+          organizationId: session.user.organizationId,
+          actorUserId: session.user.id,
+          name: requiredString(body, "name", 160),
+          categoryName: requiredString(body, "categoryName", 120),
+          variantName: optionalString(body, "variantName", 120),
+          sku: optionalString(body, "sku", 120),
+          retailPriceMinor: requiredInteger(body, "retailPriceMinor", 0),
+          lowStockThreshold: optionalInteger(body, "lowStockThreshold", 0),
+          initialQuantity,
+          unitCostMinor: initialQuantity && initialQuantity > 0 ? requiredInteger(body, "unitCostMinor", 0) : undefined,
+          lotCode: optionalString(body, "lotCode", 120),
+          expiresAt: optionalIsoDate(body, "expiresAt")
+        });
+        sendData<CatalogProductResponse>(response, 201, product, requestId);
+        return true;
+      }
+
+      if (method === "POST" && pathname === "/v1/inventory/receipts") {
+        const session = await requireCommerceSession(request, dependencies);
+        requireCatalogWrite(session.user.role);
+        const body = await readJsonObject(request);
+        const product = await requireCatalogRepository(dependencies).receiveStock({
+          organizationId: session.user.organizationId,
+          actorUserId: session.user.id,
+          variantId: requiredString(body, "variantId", 128),
+          quantity: requiredInteger(body, "quantity", 1),
+          unitCostMinor: requiredInteger(body, "unitCostMinor", 0),
+          lotCode: optionalString(body, "lotCode", 120),
+          expiresAt: optionalIsoDate(body, "expiresAt")
+        });
+        sendData<CatalogProductResponse>(response, 201, product, requestId);
+        return true;
+      }
+
       if (method === "GET" && pathname === "/v1/dashboard") {
         const session = await requireCommerceSession(request, dependencies, undefined, optionalQueryString(url, "organizationId", 128));
         const data = await dependencies.dashboardRepository.getDashboard({
@@ -162,6 +210,17 @@ async function requireMembership(
   return membership;
 }
 
+function requireCatalogRepository(dependencies: ApiRouteDependencies) {
+  if (!dependencies.catalogRepository) throw new HttpRouteError(503, "service_unavailable", "El catálogo no está disponible en este momento.");
+  return dependencies.catalogRepository;
+}
+
+function requireCatalogWrite(role: CommerceRole): void {
+  if (!(["OWNER", "INVENTORY_FULFILLMENT", "SUPER_ADMIN"] as const).includes(role as "OWNER" | "INVENTORY_FULFILLMENT" | "SUPER_ADMIN")) {
+    throw new ForbiddenError("This role cannot modify the catalogue.");
+  }
+}
+
 function toSessionUser(
   context: AuthenticatedSession,
   membership: { organizationId: string; organizationName: string; role: Exclude<CommerceRole, "SUPER_ADMIN"> }
@@ -179,13 +238,13 @@ function toSessionUser(
 
 function isKnownRoute(method: string, pathname: string): boolean {
   const routes = [
-    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/dashboard",
+    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/dashboard",
     "/v1/bootstrap/super-admin/complete"
   ];
   return (method === "OPTIONS" && routes.includes(pathname))
-    || (method === "GET" && ["/v1/auth/session", "/v1/dashboard"].includes(pathname))
+    || (method === "GET" && ["/v1/auth/session", "/v1/catalog/products", "/v1/dashboard"].includes(pathname))
     || (method === "DELETE" && pathname === "/v1/auth/session")
-    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/bootstrap/super-admin/complete"].includes(pathname));
+    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/bootstrap/super-admin/complete", "/v1/catalog/products", "/v1/inventory/receipts"].includes(pathname));
 }
 
 function isStateChanging(method: string): boolean {
@@ -251,6 +310,26 @@ function optionalString(body: Record<string, unknown>, key: string, maximumLengt
   const value = body[key];
   if (value === undefined) return undefined;
   return requiredString(body, key, maximumLength);
+}
+
+function requiredInteger(body: Record<string, unknown>, key: string, minimum: number): number {
+  const value = body[key];
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum) {
+    throw new HttpRouteError(400, "invalid_request", "La solicitud contiene campos inválidos.");
+  }
+  return value;
+}
+
+function optionalInteger(body: Record<string, unknown>, key: string, minimum: number): number | undefined {
+  if (body[key] === undefined) return undefined;
+  return requiredInteger(body, key, minimum);
+}
+
+function optionalIsoDate(body: Record<string, unknown>, key: string): string | undefined {
+  const value = optionalString(body, key, 64);
+  if (value === undefined) return undefined;
+  if (Number.isNaN(Date.parse(value))) throw new HttpRouteError(400, "invalid_request", "La fecha indicada no es válida.");
+  return value;
 }
 
 function optionalQueryString(url: URL, key: string, maximumLength: number): string | undefined {

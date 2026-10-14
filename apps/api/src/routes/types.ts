@@ -115,10 +115,52 @@ export interface DashboardRepository {
   getDashboard(input: { organizationId: string; actorUserId: string; now: Date }): Promise<DashboardSnapshotResponse>;
 }
 
+export interface CatalogProductResponse {
+  id: string;
+  variantId: string;
+  name: string;
+  variantName: string;
+  categoryName: string;
+  sku: string;
+  retailPriceMinor: number;
+  onHandQuantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  lowStockThreshold?: number;
+}
+
+export interface CatalogRouteRepository {
+  listProducts(organizationId: string): Promise<CatalogProductResponse[]>;
+  createProduct(input: {
+    organizationId: string;
+    actorUserId: string;
+    name: string;
+    categoryName: string;
+    variantName?: string;
+    sku?: string;
+    retailPriceMinor: number;
+    lowStockThreshold?: number;
+    initialQuantity?: number;
+    unitCostMinor?: number;
+    lotCode?: string;
+    expiresAt?: string;
+  }): Promise<CatalogProductResponse>;
+  receiveStock(input: {
+    organizationId: string;
+    actorUserId: string;
+    variantId: string;
+    quantity: number;
+    unitCostMinor: number;
+    lotCode?: string;
+    expiresAt?: string;
+  }): Promise<CatalogProductResponse>;
+}
+
 export interface ApiRouteDependencies {
   auth: AuthRouteService;
   authRepository: AuthSessionRepository;
   dashboardRepository: DashboardRepository;
+  catalogRepository?: CatalogRouteRepository;
   nodeEnv: "development" | "test" | "production";
   corsOrigin: string;
 }
