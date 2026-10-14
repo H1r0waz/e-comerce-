@@ -314,3 +314,39 @@ test("catalog write routes reject a sales-only user", async () => {
     assert.equal((body.error as { code: string }).code, "forbidden");
   });
 });
+
+test("order routes create pending-payment sales under the authenticated commerce", async () => {
+  const created: Array<Record<string, unknown>> = [];
+  const order = {
+    id: "order-1", orderNumber: "000001", customerName: "Sofía", customerPhone: "+5491112345678",
+    channel: "WHATSAPP" as const, status: "PENDING_PAYMENT" as const, totalMinor: 2450000,
+    reservationExpiresAt: "2030-01-01T13:00:00.000Z", lineCount: 1, createdAt: "2030-01-01T12:00:00.000Z"
+  };
+  const deps = dependencies({
+    ordersRepository: {
+      async listOrders(organizationId) { assert.equal(organizationId, "org-1"); return [order]; },
+      async createPendingPaymentOrder(input) { created.push(input); return order; }
+    }
+  });
+
+  await withServer(deps, async (origin) => {
+    const headers = { cookie: "commerce_session=valid-session", origin: dashboardOrigin, "content-type": "application/json" };
+    const response = await fetch(`${origin}/v1/orders`, {
+      method: "POST", headers,
+      body: JSON.stringify({
+        customerName: "Sofía", customerPhone: "+5491112345678", channel: "WHATSAPP",
+        lines: [{ variantId: "variant-1", quantity: 1 }], shippingChargeMinor: 0
+      })
+    });
+    assert.equal(response.status, 201);
+    assert.deepEqual(created, [{
+      organizationId: "org-1", actorUserId: "user-1", customerName: "Sofía", customerPhone: "+5491112345678",
+      customerEmail: undefined, channel: "WHATSAPP", lines: [{ variantId: "variant-1", quantity: 1 }], shippingChargeMinor: 0
+    }]);
+    assert.deepEqual((await json(response)).data, order);
+
+    const listed = await fetch(`${origin}/v1/orders`, { headers: { cookie: "commerce_session=valid-session" } });
+    assert.equal(listed.status, 200);
+    assert.deepEqual((await json(listed)).data, [order]);
+  });
+});

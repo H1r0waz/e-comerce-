@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { hashOpaqueToken } from "../lib/auth/tokens.js";
 import { AuthenticationError, BootstrapUnavailableError, ForbiddenError } from "../modules/auth/authorization.js";
+import { OrderValidationError } from "../adapters/postgres/orders-repository.js";
 import type {
   ApiRouteDependencies,
   ApiRouteHandler,
@@ -9,6 +10,8 @@ import type {
   CatalogProductResponse,
   CommerceRole,
   CommerceSessionResponse,
+  OrderChannel,
+  OrderListItemResponse,
   SessionUserResponse
 } from "./types.js";
 
@@ -158,6 +161,31 @@ export function createApiRouteHandler(dependencies: ApiRouteDependencies): ApiRo
         return true;
       }
 
+      if (method === "GET" && pathname === "/v1/orders") {
+        const session = await requireCommerceSession(request, dependencies);
+        const orders = await requireOrdersRepository(dependencies).listOrders(session.user.organizationId);
+        sendData(response, 200, orders, requestId);
+        return true;
+      }
+
+      if (method === "POST" && pathname === "/v1/orders") {
+        const session = await requireCommerceSession(request, dependencies);
+        requireOrderWrite(session.user.role);
+        const body = await readJsonObject(request);
+        const order = await requireOrdersRepository(dependencies).createPendingPaymentOrder({
+          organizationId: session.user.organizationId,
+          actorUserId: session.user.id,
+          customerName: requiredString(body, "customerName", 160),
+          customerPhone: requiredString(body, "customerPhone", 50),
+          customerEmail: optionalString(body, "customerEmail", 254),
+          channel: requiredOrderChannel(body),
+          lines: requiredOrderLines(body),
+          shippingChargeMinor: optionalInteger(body, "shippingChargeMinor", 0)
+        });
+        sendData<OrderListItemResponse>(response, 201, order, requestId);
+        return true;
+      }
+
       if (method === "GET" && pathname === "/v1/dashboard") {
         const session = await requireCommerceSession(request, dependencies, undefined, optionalQueryString(url, "organizationId", 128));
         const data = await dependencies.dashboardRepository.getDashboard({
@@ -221,6 +249,17 @@ function requireCatalogWrite(role: CommerceRole): void {
   }
 }
 
+function requireOrdersRepository(dependencies: ApiRouteDependencies) {
+  if (!dependencies.ordersRepository) throw new HttpRouteError(503, "service_unavailable", "Los pedidos no están disponibles en este momento.");
+  return dependencies.ordersRepository;
+}
+
+function requireOrderWrite(role: CommerceRole): void {
+  if (!( ["OWNER", "SALES", "SUPER_ADMIN"] as const).includes(role as "OWNER" | "SALES" | "SUPER_ADMIN")) {
+    throw new ForbiddenError("This role cannot create orders.");
+  }
+}
+
 function toSessionUser(
   context: AuthenticatedSession,
   membership: { organizationId: string; organizationName: string; role: Exclude<CommerceRole, "SUPER_ADMIN"> }
@@ -238,13 +277,13 @@ function toSessionUser(
 
 function isKnownRoute(method: string, pathname: string): boolean {
   const routes = [
-    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/dashboard",
+    "/v1/auth/session", "/v1/auth/login", "/v1/auth/invitations/accept", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders", "/v1/dashboard",
     "/v1/bootstrap/super-admin/complete"
   ];
   return (method === "OPTIONS" && routes.includes(pathname))
-    || (method === "GET" && ["/v1/auth/session", "/v1/catalog/products", "/v1/dashboard"].includes(pathname))
+    || (method === "GET" && ["/v1/auth/session", "/v1/catalog/products", "/v1/orders", "/v1/dashboard"].includes(pathname))
     || (method === "DELETE" && pathname === "/v1/auth/session")
-    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/bootstrap/super-admin/complete", "/v1/catalog/products", "/v1/inventory/receipts"].includes(pathname));
+    || (method === "POST" && ["/v1/auth/login", "/v1/auth/invitations/accept", "/v1/bootstrap/super-admin/complete", "/v1/catalog/products", "/v1/inventory/receipts", "/v1/orders"].includes(pathname));
 }
 
 function isStateChanging(method: string): boolean {
@@ -330,6 +369,24 @@ function optionalIsoDate(body: Record<string, unknown>, key: string): string | u
   if (value === undefined) return undefined;
   if (Number.isNaN(Date.parse(value))) throw new HttpRouteError(400, "invalid_request", "La fecha indicada no es válida.");
   return value;
+}
+
+function requiredOrderChannel(body: Record<string, unknown>): OrderChannel {
+  const value = requiredString(body, "channel", 32);
+  if (!(["WHATSAPP", "INSTAGRAM", "ONLINE_STORE", "MARKETPLACE", "OTHER"] as const).includes(value as OrderChannel)) {
+    throw new HttpRouteError(400, "invalid_request", "La solicitud contiene campos inválidos.");
+  }
+  return value as OrderChannel;
+}
+
+function requiredOrderLines(body: Record<string, unknown>): Array<{ variantId: string; quantity: number }> {
+  const value = body.lines;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 30) throw new HttpRouteError(400, "invalid_request", "La solicitud contiene campos inválidos.");
+  return value.map((line) => {
+    if (!line || typeof line !== "object" || Array.isArray(line)) throw new HttpRouteError(400, "invalid_request", "La solicitud contiene campos inválidos.");
+    const record = line as Record<string, unknown>;
+    return { variantId: requiredString(record, "variantId", 128), quantity: requiredInteger(record, "quantity", 1) };
+  });
 }
 
 function optionalQueryString(url: URL, key: string, maximumLength: number): string | undefined {
@@ -427,5 +484,6 @@ function toRouteError(error: unknown): HttpRouteError {
   if (error instanceof BootstrapUnavailableError) return new HttpRouteError(404, "not_found", "No encontramos el recurso solicitado.");
   if (error instanceof AuthenticationError) return new HttpRouteError(401, "unauthenticated", "Las credenciales no son válidas.");
   if (error instanceof ForbiddenError) return new HttpRouteError(403, "forbidden", "No tenés permisos para realizar esta acción.");
+  if (error instanceof OrderValidationError) return new HttpRouteError(400, "invalid_order", error.message);
   return new HttpRouteError(500, "internal_error", "No pudimos completar la solicitud.");
 }

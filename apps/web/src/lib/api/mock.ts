@@ -1,4 +1,4 @@
-import type { AcceptInvitationInput, AuthenticationResult, CatalogProduct, CommerceApi, CommerceSession, CreateProductInput, DashboardSnapshot, ReceiveStockInput, SignInInput } from "./types";
+import type { AcceptInvitationInput, AuthenticationResult, CatalogProduct, CommerceApi, CommerceSession, CreateOrderInput, CreateProductInput, DashboardSnapshot, OrderListItem, ReceiveStockInput, SignInInput } from "./types";
 
 const dashboard: DashboardSnapshot = {
   generatedAt: "2026-10-13T12:00:00.000Z",
@@ -35,6 +35,7 @@ const dashboard: DashboardSnapshot = {
 export class MockCommerceApi implements CommerceApi {
   private session: CommerceSession | null = null;
   private products: CatalogProduct[] = [];
+  private orders: OrderListItem[] = [];
 
   async getSession(): Promise<CommerceSession | null> {
     return this.session;
@@ -83,6 +84,22 @@ export class MockCommerceApi implements CommerceApi {
     product.onHandQuantity += input.quantity;
     product.availableQuantity += input.quantity;
     return product;
+  }
+
+  async listOrders(): Promise<OrderListItem[]> {
+    return this.orders;
+  }
+
+  async createOrder(input: CreateOrderInput): Promise<OrderListItem> {
+    const totalMinor = input.lines.reduce((total, line) => total + (this.products.find((product) => product.variantId === line.variantId)?.retailPriceMinor ?? 0) * line.quantity, 0) + (input.shippingChargeMinor ?? 0);
+    const order: OrderListItem = {
+      id: `demo-order-${Date.now()}`, orderNumber: String(this.orders.length + 1).padStart(6, "0"),
+      customerName: input.customerName, customerPhone: input.customerPhone, channel: input.channel, status: "PENDING_PAYMENT",
+      totalMinor, lineCount: input.lines.length, createdAt: new Date().toISOString(),
+      reservationExpiresAt: new Date(Date.now() + 60 * 60_000).toISOString()
+    };
+    this.orders = [order, ...this.orders];
+    return order;
   }
 
   private createSession(email: string, displayName: string): CommerceSession {

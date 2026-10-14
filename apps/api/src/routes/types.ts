@@ -156,11 +156,41 @@ export interface CatalogRouteRepository {
   }): Promise<CatalogProductResponse>;
 }
 
+export type OrderChannel = "WHATSAPP" | "INSTAGRAM" | "ONLINE_STORE" | "MARKETPLACE" | "OTHER";
+
+export interface OrderListItemResponse {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  channel: OrderChannel;
+  status: "PENDING_PAYMENT" | "CONFIRMED" | "PREPARING" | "READY_TO_SHIP" | "COMPLETED" | "CANCELLED" | "DRAFT";
+  totalMinor: number;
+  reservationExpiresAt?: string;
+  lineCount: number;
+  createdAt: string;
+}
+
+export interface OrdersRouteRepository {
+  listOrders(organizationId: string): Promise<OrderListItemResponse[]>;
+  createPendingPaymentOrder(input: {
+    organizationId: string;
+    actorUserId: string;
+    customerName: string;
+    customerPhone: string;
+    customerEmail?: string;
+    channel: OrderChannel;
+    lines: Array<{ variantId: string; quantity: number }>;
+    shippingChargeMinor?: number;
+  }): Promise<OrderListItemResponse>;
+}
+
 export interface ApiRouteDependencies {
   auth: AuthRouteService;
   authRepository: AuthSessionRepository;
   dashboardRepository: DashboardRepository;
   catalogRepository?: CatalogRouteRepository;
+  ordersRepository?: OrdersRouteRepository;
   nodeEnv: "development" | "test" | "production";
   corsOrigin: string;
 }

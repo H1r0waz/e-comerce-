@@ -99,6 +99,30 @@ export interface ReceiveStockInput {
   expiresAt?: string;
 }
 
+export type OrderChannel = "WHATSAPP" | "INSTAGRAM" | "ONLINE_STORE" | "MARKETPLACE" | "OTHER";
+
+export interface OrderListItem {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  channel: OrderChannel;
+  status: "PENDING_PAYMENT" | "CONFIRMED" | "PREPARING" | "READY_TO_SHIP" | "COMPLETED" | "CANCELLED" | "DRAFT";
+  totalMinor: number;
+  reservationExpiresAt?: string;
+  lineCount: number;
+  createdAt: string;
+}
+
+export interface CreateOrderInput {
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  channel: OrderChannel;
+  lines: Array<{ variantId: string; quantity: number }>;
+  shippingChargeMinor?: number;
+}
+
 export interface SignInInput {
   email: string;
   password: string;
@@ -119,4 +143,6 @@ export interface CommerceApi {
   listProducts(): Promise<CatalogProduct[]>;
   createProduct(input: CreateProductInput): Promise<CatalogProduct>;
   receiveStock(input: ReceiveStockInput): Promise<CatalogProduct>;
+  listOrders(): Promise<OrderListItem[]>;
+  createOrder(input: CreateOrderInput): Promise<OrderListItem>;
 }

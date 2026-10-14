@@ -6,7 +6,9 @@ import type {
   CommerceApi,
   CommerceSession,
   CreateProductInput,
+  CreateOrderInput,
   DashboardSnapshot,
+  OrderListItem,
   ReceiveStockInput,
   SignInInput,
 } from "./types";
@@ -51,6 +53,14 @@ class HttpCommerceApi implements CommerceApi {
 
   receiveStock(input: ReceiveStockInput): Promise<CatalogProduct> {
     return this.request("/v1/inventory/receipts", { method: "POST", body: input });
+  }
+
+  listOrders(): Promise<OrderListItem[]> {
+    return this.request("/v1/orders");
+  }
+
+  createOrder(input: CreateOrderInput): Promise<OrderListItem> {
+    return this.request("/v1/orders", { method: "POST", body: input });
   }
 
   private async request<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
@@ -100,6 +110,8 @@ class UnconfiguredCommerceApi implements CommerceApi {
   listProducts(): Promise<CatalogProduct[]> { return Promise.reject(new ApiConfigurationError(this.message)); }
   createProduct(): Promise<CatalogProduct> { return Promise.reject(new ApiConfigurationError(this.message)); }
   receiveStock(): Promise<CatalogProduct> { return Promise.reject(new ApiConfigurationError(this.message)); }
+  listOrders(): Promise<OrderListItem[]> { return Promise.reject(new ApiConfigurationError(this.message)); }
+  createOrder(): Promise<OrderListItem> { return Promise.reject(new ApiConfigurationError(this.message)); }
 }
 
 type ApiEnvelope<T> = { data?: T; error?: { code?: unknown } };
